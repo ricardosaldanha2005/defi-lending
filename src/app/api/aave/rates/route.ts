@@ -35,14 +35,14 @@ export async function GET(request: Request) {
           reserve.borrowingEnabled &&
           reserve.isActive &&
           !reserve.isFrozen &&
-          availableLiquidity > 0n;
+          availableLiquidity > BigInt(0);
         const priceInMarketReferenceCurrency =
-          priceMap.get(reserve.underlyingAsset.toLowerCase()) ?? 0n;
+          priceMap.get(reserve.underlyingAsset.toLowerCase()) ?? BigInt(0);
         const priceInUsd = reservePriceUsd(
-          { priceInMarketReferenceCurrency, decimals: 8n },
+          { priceInMarketReferenceCurrency, decimals: BigInt(8) },
           {
-            marketReferenceCurrencyUnit: 100000000n,
-            marketReferenceCurrencyPriceInUsd: 100000000n,
+            marketReferenceCurrencyUnit: BigInt(100000000),
+            marketReferenceCurrencyPriceInUsd: BigInt(100000000),
             networkBaseTokenPriceDecimals: 8,
           },
         );
