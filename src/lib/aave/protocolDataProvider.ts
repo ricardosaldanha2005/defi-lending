@@ -131,10 +131,11 @@ export async function fetchProtocolReservesData(
     functionName: "getAllReservesTokens",
   });
 
+  type ReserveEntry = Record<string, unknown> | readonly unknown[];
   const asTuple = <T extends Record<string, unknown>>(
     value: T | unknown[] | readonly unknown[],
-  ) => (Array.isArray(value) ? value : value);
-  const pick = (value: Record<string, unknown> | unknown[], key: string, idx: number) =>
+  ): ReserveEntry => (Array.isArray(value) ? value : value);
+  const pick = (value: ReserveEntry, key: string, idx: number) =>
     Array.isArray(value) ? value[idx] : value[key];
 
   const reserveList = Array.isArray(reserves)
