@@ -5,8 +5,8 @@ type BaseCurrencyInfo = {
 };
 
 export const DEFAULT_BASE_CURRENCY: BaseCurrencyInfo = {
-  marketReferenceCurrencyUnit: 100000000n,
-  marketReferenceCurrencyPriceInUsd: 100000000n,
+  marketReferenceCurrencyUnit: BigInt(100000000),
+  marketReferenceCurrencyPriceInUsd: BigInt(100000000),
   networkBaseTokenPriceDecimals: 8,
 };
 
