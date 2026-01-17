@@ -36,9 +36,9 @@ export async function GET(request: Request) {
     const priceAssets = userReserves
       .filter(
         (reserve) =>
-          reserve.scaledATokenBalance > 0n ||
-          reserve.scaledVariableDebt > 0n ||
-          reserve.principalStableDebt > 0n,
+          reserve.scaledATokenBalance > BigInt(0) ||
+          reserve.scaledVariableDebt > BigInt(0) ||
+          reserve.principalStableDebt > BigInt(0),
       )
       .map((reserve) => reserve.underlyingAsset.toLowerCase());
     const priceMap = await fetchAssetPrices(
@@ -71,7 +71,7 @@ export async function GET(request: Request) {
       );
 
       const priceInMarketReferenceCurrency =
-        priceMap.get(reserve.underlyingAsset.toLowerCase()) ?? 0n;
+        priceMap.get(reserve.underlyingAsset.toLowerCase()) ?? BigInt(0);
 
       const collateralUsd = toUsd({
         amount: aTokenBalance,
@@ -112,7 +112,7 @@ export async function GET(request: Request) {
         collateralUsd,
         debtUsd,
         priceInUsd: toUsd({
-          amount: 10n ** BigInt(asset.decimals),
+          amount: BigInt(10) ** BigInt(asset.decimals),
           decimals: Number(asset.decimals),
           priceInMarketReferenceCurrency,
           marketReferenceCurrencyUnit: baseCurrency.marketReferenceCurrencyUnit,
