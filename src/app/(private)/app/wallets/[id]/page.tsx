@@ -52,6 +52,7 @@ type ReserveSummary = {
   collateralUsd: number;
   debtAmount: number;
   debtUsd: number;
+  priceInUsd: number;
 };
 
 export default function WalletDetailPage() {
