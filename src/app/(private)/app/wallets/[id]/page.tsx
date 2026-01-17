@@ -600,7 +600,10 @@ export default function WalletDetailPage() {
                     Em unidades do asset selecionado
                   </p>
                   <p className="text-lg font-medium">
-                    {borrowToMax > 0 && selectedDebt?.priceInUsd > 0
+                    {borrowToMax > 0 &&
+                    selectedDebt &&
+                    typeof selectedDebt.priceInUsd === "number" &&
+                    selectedDebt.priceInUsd > 0
                       ? formatToken(
                           borrowToMax / selectedDebt.priceInUsd,
                           selectedDebt.symbol,
