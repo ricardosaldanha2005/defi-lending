@@ -136,7 +136,7 @@ export async function fetchProtocolReservesData(
     value: T | unknown[] | readonly unknown[],
   ): ReserveEntry => (Array.isArray(value) ? value : value);
   const pick = (value: ReserveEntry, key: string, idx: number) =>
-    Array.isArray(value) ? value[idx] : value[key];
+    Array.isArray(value) ? value[idx] : (value as Record<string, unknown>)[key];
 
   const reserveList = Array.isArray(reserves)
     ? reserves
