@@ -46,6 +46,14 @@ type WalletDetail = {
   wallet_hf_targets?: { hf_min: number; hf_max: number } | null;
 };
 
+type ReserveSummary = {
+  symbol: string;
+  collateralAmount: number;
+  collateralUsd: number;
+  debtAmount: number;
+  debtUsd: number;
+};
+
 export default function WalletDetailPage() {
   const params = useParams();
   const walletId = params.id as string;
@@ -96,19 +104,20 @@ export default function WalletDetailPage() {
     loadWallet();
   }, [supabase, walletId]);
 
-  const collateralReserves = useMemo(() => {
-    if (!userReservesData?.reserves) return [];
-    return userReservesData.reserves.filter(
-      (reserve: { collateralAmount: number }) => reserve.collateralAmount > 0,
-    );
-  }, [userReservesData]);
+  const reserves = useMemo(
+    () => (userReservesData?.reserves ?? []) as ReserveSummary[],
+    [userReservesData],
+  );
 
-  const debtReserves = useMemo(() => {
-    if (!userReservesData?.reserves) return [];
-    return userReservesData.reserves.filter(
-      (reserve: { debtAmount: number }) => reserve.debtAmount > 0,
-    );
-  }, [userReservesData]);
+  const collateralReserves = useMemo(
+    () => reserves.filter((reserve) => reserve.collateralAmount > 0),
+    [reserves],
+  );
+
+  const debtReserves = useMemo(
+    () => reserves.filter((reserve) => reserve.debtAmount > 0),
+    [reserves],
+  );
 
   useEffect(() => {
     if (debtReserves.length > 0 && !selectedDebtAsset) {
@@ -146,7 +155,7 @@ export default function WalletDetailPage() {
     : null;
 
   const selectedDebt = debtReserves.find(
-    (reserve: { symbol: string }) => reserve.symbol === selectedDebtAsset,
+    (reserve) => reserve.symbol === selectedDebtAsset,
   );
 
   const simulatedDebtUsd = selectedDebt
