@@ -139,7 +139,7 @@ export async function fetchProtocolReservesData(
 
   const reserveList = Array.isArray(reserves)
     ? reserves
-    : Object.values(reserves as Record<string, unknown>).filter(
+    : Object.values(reserves as unknown as Record<string, unknown>).filter(
         (value) =>
           Array.isArray(value) ||
           (value && typeof value === "object" && "tokenAddress" in value),
@@ -180,7 +180,7 @@ export async function fetchProtocolReservesData(
       const availableLiquidity =
         totalAToken > totalStableDebt + totalVariableDebt
           ? totalAToken - totalStableDebt - totalVariableDebt
-          : 0n;
+          : BigInt(0);
 
       return {
         underlyingAsset,
@@ -234,7 +234,7 @@ export async function fetchProtocolReservesData(
           2,
         ) as `0x${string}`,
         availableLiquidity,
-        priceInMarketReferenceCurrency: 0n,
+        priceInMarketReferenceCurrency: BigInt(0),
       };
     },
   );
@@ -242,8 +242,8 @@ export async function fetchProtocolReservesData(
   return {
     reserves: mapped,
     baseCurrency: {
-      marketReferenceCurrencyUnit: 100000000n,
-      marketReferenceCurrencyPriceInUsd: 100000000n,
+      marketReferenceCurrencyUnit: BigInt(100000000),
+      marketReferenceCurrencyPriceInUsd: BigInt(100000000),
       networkBaseTokenPriceDecimals: 8,
     },
   };
@@ -270,7 +270,7 @@ export async function fetchAssetPrices(
         return [asset, price] as const;
       } catch (error) {
         console.warn("price-oracle", asset, error);
-        return [asset, 0n] as const;
+        return [asset, BigInt(0)] as const;
       }
     },
   );
