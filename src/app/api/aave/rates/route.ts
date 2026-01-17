@@ -15,7 +15,11 @@ export async function GET(request: Request) {
     const { reserves } = await fetchReservesData(chain);
 
     const filtered = reserves
-      .filter((reserve) => BORROW_CANDIDATES.includes(reserve.symbol))
+      .filter((reserve) =>
+        BORROW_CANDIDATES.includes(
+          reserve.symbol as (typeof BORROW_CANDIDATES)[number],
+        ),
+      )
     const priceMap = await fetchAssetPrices(
       filtered.map((reserve) => reserve.underlyingAsset),
       chain,
