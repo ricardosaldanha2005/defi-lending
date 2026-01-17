@@ -298,10 +298,13 @@ export async function fetchProtocolUserReserves(
       });
 
       const pick = (
-        value: Record<string, unknown> | unknown[],
+        value: Record<string, unknown> | unknown[] | readonly unknown[],
         key: string,
         idx: number,
-      ) => (Array.isArray(value) ? value[idx] : value[key]);
+      ) =>
+        Array.isArray(value)
+          ? value[idx]
+          : (value as Record<string, unknown>)[key];
 
       return {
         underlyingAsset: reserve.underlyingAsset,
