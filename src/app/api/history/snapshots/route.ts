@@ -23,7 +23,8 @@ export async function GET(request: Request) {
       "wallet_id,chain,protocol,total_collateral_usd,total_debt_usd,health_factor,liquidation_threshold_bps,captured_at",
     )
     .eq("user_id", user.id)
-    .gte("captured_at", since);
+    .gte("captured_at", since)
+    .or("total_collateral_usd.gt.0,total_debt_usd.gt.0");
 
   if (walletId) {
     query = query.eq("wallet_id", walletId);

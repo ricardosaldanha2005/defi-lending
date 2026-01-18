@@ -27,6 +27,15 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid payload" }, { status: 400 });
   }
 
+  const collateralUsd = Number(totalCollateralUsd ?? 0);
+  const debtUsd = Number(totalDebtUsd ?? 0);
+  if (!Number.isFinite(collateralUsd) || !Number.isFinite(debtUsd)) {
+    return NextResponse.json({ error: "Invalid totals" }, { status: 400 });
+  }
+  if (collateralUsd <= 0 && debtUsd <= 0) {
+    return NextResponse.json({ ok: true, skipped: true });
+  }
+
   const { data: wallet } = await supabase
     .from("user_wallets")
     .select("id")
@@ -43,8 +52,8 @@ export async function POST(request: Request) {
     wallet_id: walletId,
     chain,
     protocol,
-    total_collateral_usd: totalCollateralUsd ?? 0,
-    total_debt_usd: totalDebtUsd ?? 0,
+    total_collateral_usd: collateralUsd,
+    total_debt_usd: debtUsd,
     health_factor: healthFactor ?? 0,
     liquidation_threshold_bps: liquidationThresholdBps ?? 0,
   });
