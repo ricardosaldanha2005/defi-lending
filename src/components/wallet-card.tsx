@@ -109,22 +109,25 @@ export function WalletCard({ wallet, onUpdateTargets, onRemove }: Props) {
           : "";
 
   return (
-    <Card>
-      <CardHeader className="space-y-2">
-        <div className="flex items-center justify-between">
-          <CardTitle className="text-base">
+    <Card className="border bg-card/80 shadow-sm">
+      <CardHeader className="space-y-3 pb-3">
+        <div className="flex items-center justify-between gap-3">
+          <CardTitle className="text-base font-semibold">
             {wallet.label ?? wallet.address}
           </CardTitle>
-          <Badge variant={badgeVariant} className={badgeClassName}>
+          <Badge
+            variant={badgeVariant}
+            className={`${badgeClassName} rounded-full px-2 py-0.5 text-xs`}
+          >
             {state}
           </Badge>
         </div>
-        <div className="text-sm text-muted-foreground">
+        <div className="text-xs text-muted-foreground truncate">
           {wallet.address} • {PROTOCOL_LABELS[wallet.protocol]}
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div className="grid gap-3 md:grid-cols-3">
+        <div className="grid gap-3 rounded-lg border bg-muted/20 p-3 md:grid-cols-3">
           <div>
             <p className="text-xs text-muted-foreground">Health Factor</p>
             <p className="text-2xl font-semibold">
@@ -172,7 +175,7 @@ export function WalletCard({ wallet, onUpdateTargets, onRemove }: Props) {
           </div>
         </div>
 
-        <Separator />
+        <Separator className="bg-border/60" />
 
         <div className="grid gap-3 md:grid-cols-2">
           <div>

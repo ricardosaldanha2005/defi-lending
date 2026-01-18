@@ -273,21 +273,21 @@ export default function DashboardPage() {
   }, [history]);
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold">Dashboard</h1>
+    <div className="space-y-8">
+      <div className="rounded-2xl border bg-card/70 p-6 shadow-sm">
+        <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
         <p className="text-sm text-muted-foreground">
           Monitoriza o Health Factor e recomendações por wallet.
         </p>
       </div>
 
-      <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold">Estratégias</h2>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h2 className="text-lg font-semibold tracking-tight">Estratégias</h2>
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
           <DialogTrigger asChild>
-            <Button>Adicionar Estratégia</Button>
+            <Button className="shadow-sm">Adicionar Estratégia</Button>
           </DialogTrigger>
-          <DialogContent>
+          <DialogContent className="sm:max-w-lg">
             <DialogHeader>
               <DialogTitle>Adicionar estratégia</DialogTitle>
             </DialogHeader>
@@ -354,12 +354,17 @@ export default function DashboardPage() {
         </Dialog>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Resumo das estratégias</CardTitle>
+      <Card className="border bg-card/80 shadow-sm">
+        <CardHeader className="flex flex-row items-center justify-between gap-4">
+          <div>
+            <CardTitle>Resumo das estratégias</CardTitle>
+            <p className="text-sm text-muted-foreground">
+              Visão geral dos valores e status atuais.
+            </p>
+          </div>
         </CardHeader>
         <CardContent className="space-y-3">
-          <div className="grid grid-cols-7 text-xs text-muted-foreground">
+          <div className="grid grid-cols-7 rounded-lg bg-muted/40 px-3 py-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
             <span>Estratégia</span>
             <span>Colateral</span>
             <span>Dívida</span>
@@ -369,6 +374,11 @@ export default function DashboardPage() {
             <span>Status</span>
           </div>
           <div className="space-y-2">
+            {!wallets.length ? (
+              <div className="rounded-lg border border-dashed px-4 py-6 text-sm text-muted-foreground">
+                Ainda não existem estratégias. Adiciona uma para começar.
+              </div>
+            ) : null}
             {wallets.map((wallet) => (
               <StrategySummaryRow
                 key={wallet.id}
@@ -402,7 +412,7 @@ export default function DashboardPage() {
               />
             ))}
           </div>
-          <div className="border-t pt-3">
+          <div className="rounded-lg border bg-muted/20 px-3 py-2">
             <div className="grid grid-cols-7 text-sm font-semibold">
               <span>Total</span>
               <span>{formatUsd(totals.collateralUsd)}</span>
@@ -419,7 +429,7 @@ export default function DashboardPage() {
       </Card>
 
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="text-lg font-semibold">
+        <h2 className="text-lg font-semibold tracking-tight">
           Histórico ({historyDays} dias)
         </h2>
         <div className="flex flex-wrap items-center gap-4">
@@ -464,7 +474,7 @@ export default function DashboardPage() {
       ) : null}
 
       <div className="grid gap-6 lg:grid-cols-2">
-        <Card>
+        <Card className="border bg-card/80 shadow-sm">
           <CardHeader>
             <CardTitle>Health Factor total ({historyDays} dias)</CardTitle>
           </CardHeader>
@@ -488,7 +498,7 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="border bg-card/80 shadow-sm">
           <CardHeader>
             <CardTitle>Colateral vs Dívida ({historyDays} dias)</CardTitle>
           </CardHeader>
@@ -526,7 +536,9 @@ export default function DashboardPage() {
         </Card>
       </div>
 
-      {loading ? <p>A carregar wallets...</p> : null}
+      {loading ? (
+        <p className="text-sm text-muted-foreground">A carregar wallets...</p>
+      ) : null}
 
       <div className="grid gap-6 lg:grid-cols-2">
         {wallets.map((wallet) => (
@@ -810,13 +822,13 @@ function StrategySummaryRow({
   }, [data, chain, walletId]);
 
   return (
-    <div className="grid grid-cols-7 text-sm items-center">
-      <span className="truncate">{name}</span>
+    <div className="grid grid-cols-7 items-center rounded-lg border border-transparent px-3 py-2 text-sm transition-colors hover:border-border hover:bg-muted/30">
+      <span className="truncate font-medium">{name}</span>
       <span>{formatUsd(collateralUsd)}</span>
       <span>{formatUsd(debtUsd)}</span>
       <span>{Number.isFinite(hf) ? formatNumber(hf, 2) : "-"}</span>
       <span>{PROTOCOL_LABELS[protocol]}</span>
-      <span className="uppercase">{chain}</span>
+      <span className="uppercase text-muted-foreground">{chain}</span>
       <span>
         <Badge variant={statusVariant} className={statusClassName}>
           {status}

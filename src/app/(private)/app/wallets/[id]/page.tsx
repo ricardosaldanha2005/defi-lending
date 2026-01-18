@@ -297,8 +297,8 @@ export default function WalletDetailPage() {
   const recommendedBorrow = ratesData?.recommended ?? "-";
 
   return (
-    <div className="space-y-6">
-      <div className="space-y-3">
+    <div className="space-y-8">
+      <div className="space-y-3 rounded-2xl border bg-card/70 p-6 shadow-sm">
         <h1 className="text-2xl font-semibold">
           {wallet?.label ?? "Wallet"}{" "}
           <span className="text-sm text-muted-foreground">
