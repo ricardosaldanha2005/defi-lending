@@ -70,6 +70,8 @@ export default function WalletDetailPage() {
   const [hfMinInput, setHfMinInput] = useState(DEFAULT_HF_MIN);
   const [hfMaxInput, setHfMaxInput] = useState(DEFAULT_HF_MAX);
   const [labelInput, setLabelInput] = useState("");
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const { data: accountData } = useProtocolAccountData(
     wallet?.address,
@@ -241,8 +243,55 @@ export default function WalletDetailPage() {
 
   const onDeleteStrategy = async () => {
     if (!wallet) return;
-    await supabase.from("user_wallets").delete().eq("id", wallet.id);
-    router.push("/app");
+    setDeleteError(null);
+    setDeleting(true);
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) {
+        setDeleteError("Precisas de estar autenticado.");
+        return;
+      }
+
+      const deletions = await Promise.all([
+        supabase
+          .from("wallet_strategy_notes")
+          .delete()
+          .eq("wallet_id", wallet.id)
+          .eq("user_id", user.id),
+        supabase
+          .from("wallet_hf_targets")
+          .delete()
+          .eq("wallet_id", wallet.id)
+          .eq("user_id", user.id),
+        supabase
+          .from("strategy_snapshots")
+          .delete()
+          .eq("wallet_id", wallet.id)
+          .eq("user_id", user.id),
+      ]);
+
+      const deletionError = deletions.find((result) => result.error)?.error;
+      if (deletionError) {
+        throw deletionError;
+      }
+
+      const { error } = await supabase
+        .from("user_wallets")
+        .delete()
+        .eq("id", wallet.id)
+        .eq("user_id", user.id);
+      if (error) {
+        throw error;
+      }
+      router.push("/app");
+    } catch (error) {
+      console.error("delete.strategy", error);
+      setDeleteError("Não foi possível eliminar a estratégia.");
+    } finally {
+      setDeleting(false);
+    }
   };
 
   const recommendedBorrow = ratesData?.recommended ?? "-";
@@ -272,11 +321,15 @@ export default function WalletDetailPage() {
             </Button>
             <Button
               onClick={onDeleteStrategy}
+              disabled={deleting}
               className="bg-red-600 text-white hover:bg-red-700"
             >
-              Eliminar estratégia
+              {deleting ? "A eliminar..." : "Eliminar estratégia"}
             </Button>
           </div>
+          {deleteError ? (
+            <p className="text-sm text-red-500">{deleteError}</p>
+          ) : null}
         </div>
         <p className="text-sm text-muted-foreground">
           Estratégia: Lending + Borrow (Bearmarket bias)
