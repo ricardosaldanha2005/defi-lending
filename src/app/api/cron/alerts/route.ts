@@ -54,12 +54,23 @@ async function mapWithConcurrency<T, R>(
   return results;
 }
 
+const ABOVE_MAX_NOTIFY_PCT = Number(process.env.ALERTS_MAX_BUFFER_PCT ?? "0.1");
+
 function getStatus(hf: number, hfMin: number, hfMax: number) {
   if (!Number.isFinite(hf)) return "OK";
   if (hf > hfMax) return "Acima do alvo";
   if (hf < 1) return "Crítico";
   if (hf < hfMin) return "Risco";
   return "OK";
+}
+
+function shouldNotify(status: AlertItem["status"], hf: number, hfMax: number) {
+  if (status === "OK") return false;
+  if (status !== "Acima do alvo") return true;
+  const buffer = Number.isFinite(ABOVE_MAX_NOTIFY_PCT)
+    ? Math.max(0, ABOVE_MAX_NOTIFY_PCT)
+    : 0.1;
+  return hf > hfMax * (1 + buffer);
 }
 
 function getAdminClient() {
@@ -121,7 +132,7 @@ export async function GET(request: Request) {
           chain,
         );
         const status = getStatus(account.healthFactorValue, hfMin, hfMax);
-        if (status === "OK") return null;
+        if (!shouldNotify(status, account.healthFactorValue, hfMax)) return null;
         return {
           walletId: wallet.id,
           userId: wallet.user_id,
@@ -172,7 +183,7 @@ export async function GET(request: Request) {
         Number.isFinite(hfValue) && hfValue > 0.05 ? hfValue : hfFromTotals;
 
       const status = getStatus(healthFactorValue, hfMin, hfMax);
-      if (status === "OK") return null;
+      if (!shouldNotify(status, healthFactorValue, hfMax)) return null;
       return {
         walletId: wallet.id,
         userId: wallet.user_id,

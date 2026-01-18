@@ -65,6 +65,7 @@ export default function DashboardPage() {
   const [historyDays, setHistoryDays] = useState("30");
   const lastNotifiedRef = useRef<Record<string, string>>({});
   const [webhookError, setWebhookError] = useState<string | null>(null);
+  const aboveMaxNotifyPct = 0.1;
 
   const onProtocolChange = (value: string) => {
     const nextProtocol = value as Protocol;
@@ -167,7 +168,9 @@ export default function DashboardPage() {
     const triggerNotification = async () => {
       const nonOk = entries.filter(([, item]) => {
         const status = getStatus(item.hf, item.hfMin, item.hfMax);
-        return status !== "OK";
+        if (status === "OK") return false;
+        if (status !== "Acima do alvo") return true;
+        return item.hf > item.hfMax * (1 + aboveMaxNotifyPct);
       });
       if (!nonOk.length) return;
 
