@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 
 import {
   useProtocolAccountData,
@@ -64,6 +64,7 @@ type ReserveSummary = {
 export default function WalletDetailPage() {
   const params = useParams();
   const walletId = params.id as string;
+  const router = useRouter();
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
   const [wallet, setWallet] = useState<WalletDetail | null>(null);
   const [hfMinInput, setHfMinInput] = useState(DEFAULT_HF_MIN);
@@ -238,6 +239,12 @@ export default function WalletDetailPage() {
     setWallet((prev) => (prev ? { ...prev, label: labelInput } : prev));
   };
 
+  const onDeleteStrategy = async () => {
+    if (!wallet) return;
+    await supabase.from("user_wallets").delete().eq("id", wallet.id);
+    router.push("/app");
+  };
+
   const recommendedBorrow = ratesData?.recommended ?? "-";
 
   return (
@@ -259,9 +266,17 @@ export default function WalletDetailPage() {
               placeholder="Ex: Bearmarket LINK"
             />
           </div>
-          <Button variant="secondary" onClick={onSaveLabel}>
-            Guardar nome
-          </Button>
+          <div className="flex flex-wrap gap-2 md:justify-end">
+            <Button variant="secondary" onClick={onSaveLabel}>
+              Guardar nome
+            </Button>
+            <Button
+              onClick={onDeleteStrategy}
+              className="bg-red-600 text-white hover:bg-red-700"
+            >
+              Eliminar estratégia
+            </Button>
+          </div>
         </div>
         <p className="text-sm text-muted-foreground">
           Estratégia: Lending + Borrow (Bearmarket bias)
