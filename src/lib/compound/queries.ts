@@ -162,12 +162,20 @@ export async function fetchCompoundUserReserves(
   const client = getPublicClient(chain);
   const market = await fetchMarketData(chain);
 
-  const borrowBalance = await client.readContract({
-    address: comet,
-    abi: cometAbi,
-    functionName: "borrowBalanceOf",
-    args: [address],
-  });
+  const [borrowBalance, baseSupplyBalance] = await Promise.all([
+    client.readContract({
+      address: comet,
+      abi: cometAbi,
+      functionName: "borrowBalanceOf",
+      args: [address],
+    }),
+    client.readContract({
+      address: comet,
+      abi: cometAbi,
+      functionName: "balanceOf",
+      args: [address],
+    }),
+  ]);
   const basePriceUsd = await fetchPriceUsd(chain, comet, market.basePriceFeed);
 
   const collateralBalances = await mapWithConcurrency(
@@ -219,18 +227,44 @@ export async function fetchCompoundUserReserves(
     }),
   );
 
+  const baseSupplyAmount = Number(
+    formatUnits(baseSupplyBalance, market.baseDecimals),
+  );
+  const baseSupplyEntry =
+    baseSupplyAmount > 0
+      ? {
+          symbol: market.baseSymbol,
+          collateralAmount: baseSupplyAmount,
+          collateralUsd: baseSupplyAmount * basePriceUsd,
+          debtAmount: 0,
+          debtUsd: 0,
+          priceInUsd: basePriceUsd,
+          liquidationFactor: BigInt(10) ** BigInt(18),
+          borrowCollateralFactor: BigInt(10) ** BigInt(18),
+        }
+      : null;
+
   const debtAmount = Number(formatUnits(borrowBalance, market.baseDecimals));
-  const debtEntry = {
-    symbol: market.baseSymbol,
-    collateralAmount: 0,
-    collateralUsd: 0,
-    debtAmount,
-    debtUsd: debtAmount * basePriceUsd,
-    priceInUsd: basePriceUsd,
-  };
+  const debtEntry =
+    debtAmount > 0
+      ? {
+          symbol: market.baseSymbol,
+          collateralAmount: 0,
+          collateralUsd: 0,
+          debtAmount,
+          debtUsd: debtAmount * basePriceUsd,
+          priceInUsd: basePriceUsd,
+        }
+      : null;
+
+  const reserves = [
+    ...collateralEntries,
+    ...(baseSupplyEntry ? [baseSupplyEntry] : []),
+    ...(debtEntry ? [debtEntry] : []),
+  ];
 
   return {
-    reserves: [...collateralEntries, debtEntry],
+    reserves,
     baseSymbol: market.baseSymbol,
     basePriceUsd,
   };
