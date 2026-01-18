@@ -16,13 +16,14 @@ export async function POST(request: Request) {
   const {
     walletId,
     chain,
+    protocol,
     totalCollateralUsd,
     totalDebtUsd,
     healthFactor,
     liquidationThresholdBps,
   } = body ?? {};
 
-  if (!walletId || !chain) {
+  if (!walletId || !chain || !protocol) {
     return NextResponse.json({ error: "Invalid payload" }, { status: 400 });
   }
 
@@ -41,6 +42,7 @@ export async function POST(request: Request) {
     user_id: user.id,
     wallet_id: walletId,
     chain,
+    protocol,
     total_collateral_usd: totalCollateralUsd ?? 0,
     total_debt_usd: totalDebtUsd ?? 0,
     health_factor: healthFactor ?? 0,

@@ -1,23 +1,23 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import Link from "next/link";
 
 import { WalletRow } from "@/hooks/useWallets";
 import {
-  useAaveAccountData,
-  useAaveRates,
-  useAaveUserReserves,
-} from "@/hooks/useAave";
+  useProtocolAccountData,
+  useProtocolRates,
+  useProtocolUserReserves,
+} from "@/hooks/useProtocol";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { formatNumber, formatToken, formatUsd } from "@/lib/format";
 import { getTargetedRecommendations, riskState } from "@/lib/calculations";
 import { DEFAULT_HF_MAX, DEFAULT_HF_MIN } from "@/lib/constants";
+import { PROTOCOL_LABELS } from "@/lib/protocols";
 
 type Props = {
   wallet: WalletRow;
@@ -26,21 +26,20 @@ type Props = {
 };
 
 export function WalletCard({ wallet, onUpdateTargets, onRemove }: Props) {
-  const { data: accountData } = useAaveAccountData(
+  const { data: accountData } = useProtocolAccountData(
     wallet.address,
     wallet.chain,
+    wallet.protocol,
   );
-  const { data: userReservesData } = useAaveUserReserves(
+  const { data: userReservesData } = useProtocolUserReserves(
     wallet.address,
     wallet.chain,
+    wallet.protocol,
   );
-  const { data: ratesData } = useAaveRates(wallet.chain);
+  const { data: ratesData } = useProtocolRates(wallet.chain, wallet.protocol);
 
   const hfMin = wallet.wallet_hf_targets?.hf_min ?? DEFAULT_HF_MIN;
   const hfMax = wallet.wallet_hf_targets?.hf_max ?? DEFAULT_HF_MAX;
-  const [hfMinInput, setHfMinInput] = useState(hfMin);
-  const [hfMaxInput, setHfMaxInput] = useState(hfMax);
-
   const totals = accountData
     ? {
         collateralUsd: accountData.totalCollateralUsd,
@@ -120,7 +119,9 @@ export function WalletCard({ wallet, onUpdateTargets, onRemove }: Props) {
             {state}
           </Badge>
         </div>
-        <div className="text-sm text-muted-foreground">{wallet.address}</div>
+        <div className="text-sm text-muted-foreground">
+          {wallet.address} • {PROTOCOL_LABELS[wallet.protocol]}
+        </div>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="grid gap-3 md:grid-cols-3">

@@ -4,12 +4,14 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { DEFAULT_HF_MAX, DEFAULT_HF_MIN } from "@/lib/constants";
+import { DEFAULT_PROTOCOL, Protocol } from "@/lib/protocols";
 
 export type WalletRow = {
   id: string;
   address: string;
   label: string | null;
   chain: string;
+  protocol: Protocol;
   created_at: string;
   wallet_hf_targets?: {
     hf_min: number;
@@ -27,7 +29,7 @@ export function useWallets() {
     const { data, error } = await supabase
       .from("user_wallets")
       .select(
-        "id,address,label,chain,created_at,wallet_hf_targets ( hf_min, hf_max )",
+        "id,address,label,chain,protocol,created_at,wallet_hf_targets ( hf_min, hf_max )",
       )
       .order("created_at", { ascending: false });
 
@@ -41,6 +43,7 @@ export function useWallets() {
           const hfMax = target ? Number(target.hf_max) : DEFAULT_HF_MAX;
           return {
             ...row,
+            protocol: (row.protocol ?? DEFAULT_PROTOCOL) as Protocol,
             wallet_hf_targets: {
               hf_min: hfMin,
               hf_max: hfMax,
@@ -53,7 +56,12 @@ export function useWallets() {
   }, [supabase]);
 
   const addWallet = useCallback(
-    async (payload: { address: string; label?: string; chain: string }) => {
+    async (payload: {
+      address: string;
+      label?: string;
+      chain: string;
+      protocol: Protocol;
+    }) => {
       const {
         data: { user },
       } = await supabase.auth.getUser();
@@ -66,6 +74,7 @@ export function useWallets() {
         address: payload.address,
         label: payload.label ?? null,
         chain: payload.chain,
+        protocol: payload.protocol,
       });
 
       if (!error) {
@@ -74,7 +83,7 @@ export function useWallets() {
       }
       const errorMessage =
         error.code === "23505" || error.message?.includes("duplicate")
-          ? "Esta wallet já existe para esta chain."
+          ? "Esta wallet já existe para esta chain e protocolo."
           : "Não foi possível adicionar a wallet.";
       return { error, errorMessage };
     },

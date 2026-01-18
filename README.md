@@ -20,9 +20,10 @@ create table user_wallets (
   user_id uuid not null references auth.users(id),
   address text not null,
   chain text not null default 'polygon',
+  protocol text not null default 'aave',
   label text,
   created_at timestamptz not null default now(),
-  unique (user_id, address, chain)
+  unique (user_id, address, chain, protocol)
 );
 
 create table wallet_hf_targets (
@@ -50,6 +51,7 @@ create table strategy_snapshots (
   user_id uuid not null references auth.users(id),
   wallet_id uuid not null references user_wallets(id),
   chain text not null,
+  protocol text not null,
   total_collateral_usd numeric not null,
   total_debt_usd numeric not null,
   health_factor numeric not null,
@@ -87,8 +89,11 @@ o mesmo address em chains diferentes, executa:
 
 ```sql
 alter table user_wallets drop constraint if exists user_wallets_user_id_address_key;
-alter table user_wallets add constraint user_wallets_user_id_address_chain_key
-unique (user_id, address, chain);
+alter table user_wallets add column if not exists protocol text not null default 'aave';
+alter table user_wallets add constraint user_wallets_user_id_address_chain_protocol_key
+unique (user_id, address, chain, protocol);
+
+alter table strategy_snapshots add column if not exists protocol text not null default 'aave';
 ```
 
 ## Variáveis de ambiente
@@ -100,6 +105,7 @@ NEXT_PUBLIC_SUPABASE_URL=
 NEXT_PUBLIC_SUPABASE_ANON_KEY=
 POLYGON_RPC_URL=https://polygon-rpc.com
 ARBITRUM_RPC_URL=https://arb1.arbitrum.io/rpc
+COMPOUND_COMET_ARBITRUM=
 N8N_WEBHOOK_URL=https://ricardon8n.duckdns.org/webhook-test/defi-lending
 ```
 

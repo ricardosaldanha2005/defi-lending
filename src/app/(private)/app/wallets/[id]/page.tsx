@@ -3,7 +3,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 
-import { useAaveAccountData, useAaveRates, useAaveUserReserves } from "@/hooks/useAave";
+import {
+  useProtocolAccountData,
+  useProtocolRates,
+  useProtocolUserReserves,
+} from "@/hooks/useProtocol";
 import { useWalletNotes } from "@/hooks/useWalletNotes";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { DEFAULT_HF_MAX, DEFAULT_HF_MIN } from "@/lib/constants";
@@ -37,12 +41,14 @@ import {
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
+import { PROTOCOL_LABELS, Protocol } from "@/lib/protocols";
 
 type WalletDetail = {
   id: string;
   address: string;
   label: string | null;
   chain: string;
+  protocol: Protocol;
   wallet_hf_targets?: { hf_min: number; hf_max: number } | null;
 };
 
@@ -64,15 +70,20 @@ export default function WalletDetailPage() {
   const [hfMaxInput, setHfMaxInput] = useState(DEFAULT_HF_MAX);
   const [labelInput, setLabelInput] = useState("");
 
-  const { data: accountData } = useAaveAccountData(
+  const { data: accountData } = useProtocolAccountData(
     wallet?.address,
     wallet?.chain ?? "polygon",
+    wallet?.protocol ?? "aave",
   );
-  const { data: userReservesData } = useAaveUserReserves(
+  const { data: userReservesData } = useProtocolUserReserves(
     wallet?.address,
     wallet?.chain ?? "polygon",
+    wallet?.protocol ?? "aave",
   );
-  const { data: ratesData } = useAaveRates(wallet?.chain ?? "polygon");
+  const { data: ratesData } = useProtocolRates(
+    wallet?.chain ?? "polygon",
+    wallet?.protocol ?? "aave",
+  );
   const { notes, setNotes, saveNotes } = useWalletNotes(walletId);
 
   const [selectedDebtAsset, setSelectedDebtAsset] = useState<string>("");
@@ -82,7 +93,9 @@ export default function WalletDetailPage() {
     const loadWallet = async () => {
       const { data } = await supabase
         .from("user_wallets")
-        .select("id,address,label,chain,wallet_hf_targets ( hf_min, hf_max )")
+        .select(
+          "id,address,label,chain,protocol,wallet_hf_targets ( hf_min, hf_max )",
+        )
         .eq("id", walletId)
         .maybeSingle();
       if (data) {
@@ -96,6 +109,7 @@ export default function WalletDetailPage() {
           wallet_hf_targets: target
             ? { hf_min: hfMin, hf_max: hfMax }
             : null,
+          protocol: (data.protocol ?? "aave") as Protocol,
         });
         setLabelInput(data.label ?? "");
         setHfMinInput(hfMin);
@@ -232,7 +246,8 @@ export default function WalletDetailPage() {
         <h1 className="text-2xl font-semibold">
           {wallet?.label ?? "Wallet"}{" "}
           <span className="text-sm text-muted-foreground">
-            {wallet?.address}
+            {wallet?.address} •{" "}
+            {wallet ? PROTOCOL_LABELS[wallet.protocol] : "—"}
           </span>
         </h1>
         <div className="grid gap-2 md:grid-cols-[2fr_auto] md:items-end">

@@ -20,7 +20,7 @@ export async function GET(request: Request) {
   let query = supabase
     .from("strategy_snapshots")
     .select(
-      "wallet_id,chain,total_collateral_usd,total_debt_usd,health_factor,liquidation_threshold_bps,captured_at",
+      "wallet_id,chain,protocol,total_collateral_usd,total_debt_usd,health_factor,liquidation_threshold_bps,captured_at",
     )
     .eq("user_id", user.id)
     .gte("captured_at", since);

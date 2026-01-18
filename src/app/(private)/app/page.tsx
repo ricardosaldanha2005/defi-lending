@@ -24,9 +24,14 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useWallets } from "@/hooks/useWallets";
-import { useAaveAccountData } from "@/hooks/useAave";
+import { useProtocolAccountData } from "@/hooks/useProtocol";
 import { getTargetedRecommendations, riskState } from "@/lib/calculations";
 import { formatNumber, formatUsd } from "@/lib/format";
+import {
+  DEFAULT_PROTOCOL,
+  PROTOCOL_LABELS,
+  Protocol,
+} from "@/lib/protocols";
 
 export default function DashboardPage() {
   const { wallets, loading, addWallet, updateTargets, removeWallet } =
@@ -34,6 +39,7 @@ export default function DashboardPage() {
   const [address, setAddress] = useState("");
   const [label, setLabel] = useState("");
   const [chain, setChain] = useState("polygon");
+  const [protocol, setProtocol] = useState<Protocol>(DEFAULT_PROTOCOL);
   const [error, setError] = useState<string | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [summary, setSummary] = useState<
@@ -46,6 +52,7 @@ export default function DashboardPage() {
         lt: number;
         name: string;
         chain: string;
+        protocol: Protocol;
         hfMin: number;
         hfMax: number;
       }
@@ -59,6 +66,14 @@ export default function DashboardPage() {
   const lastNotifiedRef = useRef<Record<string, string>>({});
   const [webhookError, setWebhookError] = useState<string | null>(null);
 
+  const onProtocolChange = (value: string) => {
+    const nextProtocol = value as Protocol;
+    setProtocol(nextProtocol);
+    if (nextProtocol === "compound" && chain !== "arbitrum") {
+      setChain("arbitrum");
+    }
+  };
+
   const onAddWallet = async (event: React.FormEvent) => {
     event.preventDefault();
     setError(null);
@@ -71,6 +86,7 @@ export default function DashboardPage() {
       address: trimmed,
       label,
       chain,
+      protocol,
     });
     if (error) {
       setError(errorMessage ?? "Não foi possível adicionar a wallet.");
@@ -175,6 +191,7 @@ export default function DashboardPage() {
               walletId,
               name: item.name,
               chain: item.chain,
+              protocol: item.protocol,
               status,
               hf: item.hf,
               hfMin: item.hfMin,
@@ -292,14 +309,36 @@ export default function DashboardPage() {
                 />
               </div>
               <div className="space-y-2">
+                <Label>Protocolo</Label>
+                <Select value={protocol} onValueChange={onProtocolChange}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Seleciona o protocolo" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="aave">
+                      {PROTOCOL_LABELS.aave}
+                    </SelectItem>
+                    <SelectItem value="compound">
+                      {PROTOCOL_LABELS.compound}
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
                 <Label>Chain</Label>
                 <Select value={chain} onValueChange={setChain}>
                   <SelectTrigger>
                     <SelectValue placeholder="Seleciona a chain" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="polygon">Polygon</SelectItem>
-                    <SelectItem value="arbitrum">Arbitrum</SelectItem>
+                    {protocol === "aave" ? (
+                      <>
+                        <SelectItem value="polygon">Polygon</SelectItem>
+                        <SelectItem value="arbitrum">Arbitrum</SelectItem>
+                      </>
+                    ) : (
+                      <SelectItem value="arbitrum">Arbitrum</SelectItem>
+                    )}
                   </SelectContent>
                 </Select>
               </div>
@@ -317,11 +356,12 @@ export default function DashboardPage() {
           <CardTitle>Resumo das estratégias</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
-          <div className="grid grid-cols-6 text-xs text-muted-foreground">
+          <div className="grid grid-cols-7 text-xs text-muted-foreground">
             <span>Estratégia</span>
             <span>Colateral</span>
             <span>Dívida</span>
             <span>HF</span>
+            <span>Protocolo</span>
             <span>Chain</span>
             <span>Status</span>
           </div>
@@ -333,6 +373,7 @@ export default function DashboardPage() {
                 address={wallet.address}
                 name={wallet.label ?? "Sem nome"}
                 chain={wallet.chain}
+                protocol={wallet.protocol}
                 onData={(data) =>
                   setSummary((prev) => {
                     const current = prev[wallet.id];
@@ -343,6 +384,7 @@ export default function DashboardPage() {
                       current.hf === data.hf &&
                       current.lt === data.lt &&
                       current.name === data.name &&
+                      current.protocol === data.protocol &&
                       current.chain === data.chain &&
                       current.hfMin === data.hfMin &&
                       current.hfMax === data.hfMax
@@ -358,13 +400,14 @@ export default function DashboardPage() {
             ))}
           </div>
           <div className="border-t pt-3">
-            <div className="grid grid-cols-6 text-sm font-semibold">
+            <div className="grid grid-cols-7 text-sm font-semibold">
               <span>Total</span>
               <span>{formatUsd(totals.collateralUsd)}</span>
               <span>{formatUsd(totals.debtUsd)}</span>
               <span>
                 {Number.isFinite(totals.hf) ? formatNumber(totals.hf, 2) : "-"}
               </span>
+              <span>—</span>
               <span>—</span>
               <span>—</span>
             </div>
@@ -499,6 +542,7 @@ export default function DashboardPage() {
 type HistorySnapshot = {
   wallet_id: string;
   chain: string;
+  protocol: Protocol;
   total_collateral_usd: number;
   total_debt_usd: number;
   health_factor: number;
@@ -645,6 +689,7 @@ function StrategySummaryRow({
   address,
   name,
   chain,
+  protocol,
   onData,
   hfMin,
   hfMax,
@@ -653,6 +698,7 @@ function StrategySummaryRow({
   address: string;
   name: string;
   chain: string;
+  protocol: Protocol;
   onData: (data: {
     collateralUsd: number;
     debtUsd: number;
@@ -660,13 +706,14 @@ function StrategySummaryRow({
     lt: number;
     name: string;
     chain: string;
+    protocol: Protocol;
     hfMin: number;
     hfMax: number;
   }) => void;
   hfMin: number;
   hfMax: number;
 }) {
-  const { data } = useAaveAccountData(address, chain);
+  const { data } = useProtocolAccountData(address, chain, protocol);
   const collateralUsd = data?.totalCollateralUsd ?? 0;
   const debtUsd = data?.totalDebtUsd ?? 0;
   const lt = data?.currentLiquidationThreshold ?? 0;
@@ -700,8 +747,29 @@ function StrategySummaryRow({
   });
 
   useEffect(() => {
-    onData({ collateralUsd, debtUsd, hf, lt, name, chain, hfMin, hfMax });
-  }, [collateralUsd, debtUsd, hf, name, chain, hfMin, hfMax, onData, walletId]);
+    onData({
+      collateralUsd,
+      debtUsd,
+      hf,
+      lt,
+      name,
+      chain,
+      protocol,
+      hfMin,
+      hfMax,
+    });
+  }, [
+    collateralUsd,
+    debtUsd,
+    hf,
+    name,
+    chain,
+    protocol,
+    hfMin,
+    hfMax,
+    onData,
+    walletId,
+  ]);
 
   useEffect(() => {
     if (!data) return;
@@ -724,6 +792,7 @@ function StrategySummaryRow({
         body: JSON.stringify({
           walletId,
           chain,
+          protocol,
           totalCollateralUsd: payload.totalCollateralUsd,
           totalDebtUsd: payload.totalDebtUsd,
           healthFactor: payload.healthFactor,
@@ -738,11 +807,12 @@ function StrategySummaryRow({
   }, [data, chain, walletId]);
 
   return (
-    <div className="grid grid-cols-6 text-sm items-center">
+    <div className="grid grid-cols-7 text-sm items-center">
       <span className="truncate">{name}</span>
       <span>{formatUsd(collateralUsd)}</span>
       <span>{formatUsd(debtUsd)}</span>
       <span>{Number.isFinite(hf) ? formatNumber(hf, 2) : "-"}</span>
+      <span>{PROTOCOL_LABELS[protocol]}</span>
       <span className="uppercase">{chain}</span>
       <span>
         <Badge variant={statusVariant} className={statusClassName}>
