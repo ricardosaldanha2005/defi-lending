@@ -366,14 +366,16 @@ export async function fetchCompoundAccountData(
   const weightedBorrowLimit = collateralEntries.reduce((acc, entry) => {
     const factor =
       "borrowCollateralFactor" in entry ? entry.borrowCollateralFactor : 0;
-    const ratio = typeof factor === "bigint" ? Number(factor) / 1e18 : factor;
+    const ratio =
+      typeof factor === "bigint" ? Number(factor) / 1e18 : Number(factor);
     return acc + entry.collateralUsd * ratio;
   }, 0);
 
   const weightedLiquidation = collateralEntries.reduce((acc, entry) => {
     const factor =
       "liquidationFactor" in entry ? entry.liquidationFactor : 0;
-    const ratio = typeof factor === "bigint" ? Number(factor) / 1e18 : factor;
+    const ratio =
+      typeof factor === "bigint" ? Number(factor) / 1e18 : Number(factor);
     return acc + entry.collateralUsd * ratio;
   }, 0);
 
