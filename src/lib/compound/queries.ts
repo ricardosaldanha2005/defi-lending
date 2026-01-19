@@ -12,7 +12,7 @@ import {
 const PRICE_DECIMALS = 8;
 const PRICE_SCALE = Number(BigInt(10) ** BigInt(PRICE_DECIMALS));
 const MARKET_TTL = 5 * 60 * 1000;
-const DEFAULT_CONCURRENCY = 2;
+const DEFAULT_CONCURRENCY = 1;
 const BATCH_DELAY_MS = 200;
 
 type CompoundAssetInfo = {
@@ -56,34 +56,59 @@ function scaleToDecimals(scale: bigint) {
   return Math.max(0, digits - 1);
 }
 
+function isRateLimitError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error);
+  return message.includes("429") || message.includes("Too Many Requests");
+}
+
+async function readContractWithRetry<T>(
+  client: ReturnType<typeof getPublicClient>,
+  args: Parameters<typeof client.readContract>[0],
+  retries = 3,
+  baseDelayMs = 400,
+) {
+  for (let attempt = 0; attempt <= retries; attempt += 1) {
+    try {
+      return (await client.readContract(args)) as T;
+    } catch (error) {
+      if (!isRateLimitError(error) || attempt === retries) {
+        throw error;
+      }
+      const delay = baseDelayMs * (attempt + 1);
+      await new Promise((resolve) => setTimeout(resolve, delay));
+    }
+  }
+  throw new Error("readContractWithRetry failed unexpectedly");
+}
+
 async function fetchMarketData(chain: CompoundChain) {
   return withCache(`compound:market:${chain}`, MARKET_TTL, async () => {
     const comet = getCometAddress(chain);
     const client = getPublicClient(chain);
 
-    const baseToken = await client.readContract({
+    const baseToken = await readContractWithRetry<`0x${string}`>(client, {
       address: comet,
       abi: cometAbi,
       functionName: "baseToken",
     });
     const [basePriceFeed, baseDecimals, baseSymbol, assetCount] =
       await Promise.all([
-        client.readContract({
+        readContractWithRetry<`0x${string}`>(client, {
           address: comet,
           abi: cometAbi,
           functionName: "baseTokenPriceFeed",
         }),
-        client.readContract({
+        readContractWithRetry<number>(client, {
           address: baseToken,
           abi: erc20Abi,
           functionName: "decimals",
         }),
-        client.readContract({
+        readContractWithRetry<string>(client, {
           address: baseToken,
           abi: erc20Abi,
           functionName: "symbol",
         }),
-        client.readContract({
+        readContractWithRetry<bigint>(client, {
           address: comet,
           abi: cometAbi,
           functionName: "numAssets",
@@ -96,7 +121,7 @@ async function fetchMarketData(chain: CompoundChain) {
       indices,
       DEFAULT_CONCURRENCY,
       async (index) => {
-        const info = await client.readContract({
+        const info = await readContractWithRetry<CompoundAssetInfo>(client, {
           address: comet,
           abi: cometAbi,
           functionName: "getAssetInfo",
@@ -130,7 +155,7 @@ async function fetchPriceUsd(
 ) {
   const client = getPublicClient(chain);
   try {
-    const price = await client.readContract({
+    const price = await readContractWithRetry<bigint>(client, {
       address: comet,
       abi: cometAbi,
       functionName: "getPrice",
@@ -164,13 +189,13 @@ export async function fetchCompoundUserReserves(
   const market = await fetchMarketData(chain);
 
   const [borrowBalance, baseSupplyBalance] = await Promise.all([
-    client.readContract({
+    readContractWithRetry<bigint>(client, {
       address: comet,
       abi: cometAbi,
       functionName: "borrowBalanceOf",
       args: [address],
     }),
-    client.readContract({
+    readContractWithRetry<bigint>(client, {
       address: comet,
       abi: cometAbi,
       functionName: "balanceOf",
@@ -183,7 +208,7 @@ export async function fetchCompoundUserReserves(
     market.assets,
     DEFAULT_CONCURRENCY,
     async (asset) => {
-      const balance = await client.readContract({
+      const balance = await readContractWithRetry<bigint>(client, {
         address: comet,
         abi: cometAbi,
         functionName: "collateralBalanceOf",
@@ -201,7 +226,7 @@ export async function fetchCompoundUserReserves(
     collateralWithBalance,
     DEFAULT_CONCURRENCY,
     async ({ asset }) => {
-      const symbol = await client.readContract({
+      const symbol = await readContractWithRetry<string>(client, {
         address: asset.asset,
         abi: erc20Abi,
         functionName: "symbol",
@@ -221,7 +246,7 @@ export async function fetchCompoundUserReserves(
         let symbol = isNativePlaceholder ? "ETH" : "UNKNOWN";
         if (!isNativePlaceholder && isAddress(asset.asset)) {
           try {
-            symbol = await client.readContract({
+            symbol = await readContractWithRetry<string>(client, {
               address: asset.asset,
               abi: erc20Abi,
               functionName: "symbol",
