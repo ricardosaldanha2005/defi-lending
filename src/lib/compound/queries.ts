@@ -276,6 +276,9 @@ export async function fetchCompoundUserReserves(
       const decimals = scaleToDecimals(asset.scale);
       const amount = Number(formatUnits(balance, decimals));
       const priceUsd = await fetchPriceUsd(chain, comet, asset.priceFeed);
+      const borrowCollateralFactor =
+        Number(asset.borrowCollateralFactor) / 1e18;
+      const liquidationFactor = Number(asset.liquidationFactor) / 1e18;
       return {
         symbol: collateralSymbols[index] ?? "COLL",
         collateralAmount: amount,
@@ -283,8 +286,8 @@ export async function fetchCompoundUserReserves(
         debtAmount: 0,
         debtUsd: 0,
         priceInUsd: priceUsd,
-        liquidationFactor: asset.liquidationFactor,
-        borrowCollateralFactor: asset.borrowCollateralFactor,
+        liquidationFactor,
+        borrowCollateralFactor,
       };
     }),
   );
@@ -301,8 +304,8 @@ export async function fetchCompoundUserReserves(
           debtAmount: 0,
           debtUsd: 0,
           priceInUsd: basePriceUsd,
-          liquidationFactor: BigInt(10) ** BigInt(18),
-          borrowCollateralFactor: BigInt(10) ** BigInt(18),
+          liquidationFactor: 1,
+          borrowCollateralFactor: 1,
         }
       : null;
 
@@ -361,14 +364,16 @@ export async function fetchCompoundAccountData(
   );
 
   const weightedBorrowLimit = collateralEntries.reduce((acc, entry) => {
-    const factor = "borrowCollateralFactor" in entry ? entry.borrowCollateralFactor : BigInt(0);
-    const ratio = Number(factor) / 1e18;
+    const factor =
+      "borrowCollateralFactor" in entry ? entry.borrowCollateralFactor : 0;
+    const ratio = typeof factor === "bigint" ? Number(factor) / 1e18 : factor;
     return acc + entry.collateralUsd * ratio;
   }, 0);
 
   const weightedLiquidation = collateralEntries.reduce((acc, entry) => {
-    const factor = "liquidationFactor" in entry ? entry.liquidationFactor : BigInt(0);
-    const ratio = Number(factor) / 1e18;
+    const factor =
+      "liquidationFactor" in entry ? entry.liquidationFactor : 0;
+    const ratio = typeof factor === "bigint" ? Number(factor) / 1e18 : factor;
     return acc + entry.collateralUsd * ratio;
   }, 0);
 
