@@ -1,4 +1,4 @@
-import { formatUnits } from "viem";
+import { formatUnits, isAddress } from "viem";
 
 import { getPublicClient } from "@/lib/aave/client";
 import { withCache } from "@/lib/cache";
@@ -216,11 +216,20 @@ export async function fetchCompoundUserReserves(
           (entry) => entry.asset.asset === asset.asset,
         );
         const rawBalance = balanceEntry?.balance ?? BigInt(0);
-        const symbol = await client.readContract({
-          address: asset.asset,
-          abi: erc20Abi,
-          functionName: "symbol",
-        });
+        const isNativePlaceholder =
+          asset.asset.toLowerCase() === "0x0000000000000000000000000000000000000001";
+        let symbol = isNativePlaceholder ? "ETH" : "UNKNOWN";
+        if (!isNativePlaceholder && isAddress(asset.asset)) {
+          try {
+            symbol = await client.readContract({
+              address: asset.asset,
+              abi: erc20Abi,
+              functionName: "symbol",
+            });
+          } catch {
+            symbol = "UNKNOWN";
+          }
+        }
         const decimals = scaleToDecimals(asset.scale);
         const amount = Number(formatUnits(rawBalance, decimals));
         const priceUsd = await fetchPriceUsd(chain, comet, asset.priceFeed);
