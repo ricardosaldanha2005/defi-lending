@@ -157,6 +157,7 @@ export async function fetchCompoundBaseAsset(
 export async function fetchCompoundUserReserves(
   address: `0x${string}`,
   chain: CompoundChain = DEFAULT_COMPOUND_CHAIN,
+  debug = false,
 ) {
   const comet = getCometAddress(chain);
   const client = getPublicClient(chain);
@@ -208,6 +209,32 @@ export async function fetchCompoundUserReserves(
       return symbol;
     },
   );
+
+  const debugAssets = debug
+    ? await mapWithConcurrency(market.assets, DEFAULT_CONCURRENCY, async (asset) => {
+        const balanceEntry = collateralBalances.find(
+          (entry) => entry.asset.asset === asset.asset,
+        );
+        const rawBalance = balanceEntry?.balance ?? BigInt(0);
+        const symbol = await client.readContract({
+          address: asset.asset,
+          abi: erc20Abi,
+          functionName: "symbol",
+        });
+        const decimals = scaleToDecimals(asset.scale);
+        const amount = Number(formatUnits(rawBalance, decimals));
+        const priceUsd = await fetchPriceUsd(chain, comet, asset.priceFeed);
+        return {
+          symbol,
+          asset: asset.asset,
+          priceFeed: asset.priceFeed,
+          scale: asset.scale.toString(),
+          balance: rawBalance.toString(),
+          amount,
+          priceUsd,
+        };
+      })
+    : null;
 
   const collateralEntries = await Promise.all(
     collateralWithBalance.map(async ({ asset, balance }, index) => {
@@ -268,6 +295,15 @@ export async function fetchCompoundUserReserves(
     comet,
     baseSymbol: market.baseSymbol,
     basePriceUsd,
+    debug: debug
+      ? {
+          baseDecimals: market.baseDecimals,
+          basePriceUsd,
+          baseSupplyBalance: baseSupplyBalance.toString(),
+          borrowBalance: borrowBalance.toString(),
+          assets: debugAssets,
+        }
+      : null,
   };
 }
 

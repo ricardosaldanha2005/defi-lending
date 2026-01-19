@@ -10,15 +10,18 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const address = searchParams.get("address");
   const chain = parseCompoundChain(searchParams.get("chain")) ?? "arbitrum";
+  const debug = searchParams.get("debug") === "1";
 
   if (!address || !isAddress(address)) {
     return NextResponse.json({ error: "Invalid address" }, { status: 400 });
   }
 
   try {
-    const { reserves, baseSymbol, comet } = await fetchCompoundUserReserves(
+    const { reserves, baseSymbol, comet, debug: debugInfo } =
+      await fetchCompoundUserReserves(
       address as `0x${string}`,
       chain,
+        debug,
     );
 
     return NextResponse.json({
@@ -27,6 +30,7 @@ export async function GET(request: Request) {
         baseSymbol,
         comet,
       },
+      debug: debugInfo,
       protocol: "compound",
       chain,
     });
