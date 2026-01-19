@@ -73,23 +73,20 @@ export default function WalletDetailPage() {
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
 
-  const { data: accountData, error: accountError } = useProtocolAccountData(
+  const { data: accountData } = useProtocolAccountData(
     wallet?.address,
     wallet?.chain ?? "polygon",
     wallet?.protocol ?? "aave",
   );
-  const { data: userReservesData, error: reservesError } =
-    useProtocolUserReserves(
+  const { data: userReservesData } = useProtocolUserReserves(
     wallet?.address,
     wallet?.chain ?? "polygon",
     wallet?.protocol ?? "aave",
   );
-  const { data: ratesData, error: ratesError } = useProtocolRates(
+  const { data: ratesData } = useProtocolRates(
     wallet?.chain ?? "polygon",
     wallet?.protocol ?? "aave",
   );
-  const errorMessage =
-    accountError?.message || reservesError?.message || ratesError?.message || "";
   const { notes, setNotes, saveNotes } = useWalletNotes(walletId);
 
   const [selectedDebtAsset, setSelectedDebtAsset] = useState<string>("");
@@ -339,11 +336,6 @@ export default function WalletDetailPage() {
             <p className="text-sm text-red-500">{deleteError}</p>
           ) : null}
         </div>
-        {errorMessage ? (
-          <p className="text-sm text-red-500">
-            Falha ao atualizar dados on-chain: {errorMessage}
-          </p>
-        ) : null}
         <p className="text-sm text-muted-foreground">
           Estratégia: Lending + Borrow (Bearmarket bias)
         </p>
