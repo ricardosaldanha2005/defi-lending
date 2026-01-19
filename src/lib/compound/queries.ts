@@ -16,6 +16,7 @@ const DEFAULT_CONCURRENCY = 1;
 const BATCH_DELAY_MS = 200;
 
 type CompoundAssetInfo = {
+  offset?: number | bigint;
   asset: `0x${string}`;
   priceFeed: `0x${string}`;
   scale: bigint;

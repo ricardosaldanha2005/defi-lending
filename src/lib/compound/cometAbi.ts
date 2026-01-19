@@ -53,6 +53,7 @@ export const cometAbi = [
       {
         type: "tuple",
         components: [
+          { name: "offset", type: "uint8" },
           { name: "asset", type: "address" },
           { name: "priceFeed", type: "address" },
           { name: "scale", type: "uint64" },
