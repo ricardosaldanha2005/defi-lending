@@ -114,6 +114,11 @@ export function WalletCard({ wallet, onUpdateTargets, onRemove }: Props) {
           ? "bg-sky-500 text-white border-transparent"
           : "";
 
+  const marketLabel =
+    wallet.protocol === "compound" && accountData?.market?.baseSymbol
+      ? ` • ${accountData.market.baseSymbol} market`
+      : "";
+
   return (
     <Card className="border bg-card/80 shadow-sm">
       <CardHeader className="space-y-3 pb-3">
@@ -130,6 +135,7 @@ export function WalletCard({ wallet, onUpdateTargets, onRemove }: Props) {
         </div>
         <div className="text-xs text-muted-foreground truncate">
           {wallet.address} • {PROTOCOL_LABELS[wallet.protocol]}
+          {marketLabel}
         </div>
       </CardHeader>
       <CardContent className="space-y-4">

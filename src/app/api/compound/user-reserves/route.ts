@@ -16,13 +16,17 @@ export async function GET(request: Request) {
   }
 
   try {
-    const { reserves } = await fetchCompoundUserReserves(
+    const { reserves, baseSymbol, comet } = await fetchCompoundUserReserves(
       address as `0x${string}`,
       chain,
     );
 
     return NextResponse.json({
       reserves,
+      market: {
+        baseSymbol,
+        comet,
+      },
       protocol: "compound",
       chain,
     });

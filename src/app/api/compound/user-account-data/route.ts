@@ -28,6 +28,7 @@ export async function GET(request: Request) {
       currentLiquidationThreshold: accountData.currentLiquidationThreshold,
       ltv: accountData.ltv,
       healthFactorValue: accountData.healthFactorValue,
+      market: accountData.market,
       protocol: "compound",
       chain,
     });

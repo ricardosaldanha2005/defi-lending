@@ -265,6 +265,7 @@ export async function fetchCompoundUserReserves(
 
   return {
     reserves,
+    comet,
     baseSymbol: market.baseSymbol,
     basePriceUsd,
   };
@@ -274,7 +275,10 @@ export async function fetchCompoundAccountData(
   address: `0x${string}`,
   chain: CompoundChain = DEFAULT_COMPOUND_CHAIN,
 ) {
-  const { reserves } = await fetchCompoundUserReserves(address, chain);
+  const { reserves, baseSymbol, comet } = await fetchCompoundUserReserves(
+    address,
+    chain,
+  );
   const collateralEntries = reserves.filter((entry) => entry.collateralAmount > 0);
   const totalCollateralUsd = collateralEntries.reduce(
     (acc, entry) => acc + (Number.isFinite(entry.collateralUsd) ? entry.collateralUsd : 0),
@@ -314,5 +318,9 @@ export async function fetchCompoundAccountData(
     currentLiquidationThreshold,
     ltv,
     healthFactorValue,
+    market: {
+      baseSymbol,
+      comet,
+    },
   };
 }

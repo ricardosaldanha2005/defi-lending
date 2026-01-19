@@ -298,6 +298,10 @@ export default function WalletDetailPage() {
   };
 
   const recommendedBorrow = ratesData?.recommended ?? "-";
+  const marketLabel =
+    wallet?.protocol === "compound" && accountData?.market?.baseSymbol
+      ? ` • ${accountData.market.baseSymbol} market`
+      : "";
 
   return (
     <div className="space-y-8">
@@ -307,6 +311,7 @@ export default function WalletDetailPage() {
           <span className="text-sm text-muted-foreground">
             {wallet?.address} •{" "}
             {wallet ? PROTOCOL_LABELS[wallet.protocol] : "—"}
+            {marketLabel}
           </span>
         </h1>
         <div className="grid gap-2 md:grid-cols-[2fr_auto] md:items-end">
