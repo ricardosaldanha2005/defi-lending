@@ -208,6 +208,13 @@ async function resolveBaseUsdPrice(
   return basePriceInBase;
 }
 
+function pricesAreUsd(baseSymbol: string, basePriceInBase: number) {
+  if (baseSymbol === "WETH" || baseSymbol === "ETH") {
+    return false;
+  }
+  return basePriceInBase > 0 && basePriceInBase < 1000;
+}
+
 export async function fetchCompoundBaseAsset(
   chain: CompoundChain = DEFAULT_COMPOUND_CHAIN,
 ) {
@@ -218,11 +225,9 @@ export async function fetchCompoundBaseAsset(
     comet,
     market.basePriceFeed,
   );
-  const basePriceUsd = await resolveBaseUsdPrice(
-    chain,
-    market.baseSymbol,
-    basePriceInBase,
-  );
+  const basePriceUsd = pricesAreUsd(market.baseSymbol, basePriceInBase)
+    ? basePriceInBase
+    : await resolveBaseUsdPrice(chain, market.baseSymbol, basePriceInBase);
   return {
     symbol: market.baseSymbol,
     priceInUsd: basePriceUsd,
@@ -257,11 +262,10 @@ export async function fetchCompoundUserReserves(
     comet,
     market.basePriceFeed,
   );
-  const basePriceUsd = await resolveBaseUsdPrice(
-    chain,
-    market.baseSymbol,
-    basePriceInBase,
-  );
+  const basePricesAreUsd = pricesAreUsd(market.baseSymbol, basePriceInBase);
+  const basePriceUsd = basePricesAreUsd
+    ? basePriceInBase
+    : await resolveBaseUsdPrice(chain, market.baseSymbol, basePriceInBase);
 
   const collateralBalances = await mapWithConcurrency(
     market.assets,
@@ -317,7 +321,9 @@ export async function fetchCompoundUserReserves(
         const decimals = scaleToDecimals(asset.scale);
         const amount = Number(formatUnits(rawBalance, decimals));
         const priceInBase = await fetchPriceInBase(chain, comet, asset.priceFeed);
-        const priceUsd = priceInBase * basePriceUsd;
+        const priceUsd = basePricesAreUsd
+          ? priceInBase
+          : priceInBase * basePriceUsd;
         return {
           symbol,
           asset: asset.asset,
@@ -335,7 +341,9 @@ export async function fetchCompoundUserReserves(
       const decimals = scaleToDecimals(asset.scale);
       const amount = Number(formatUnits(balance, decimals));
         const priceInBase = await fetchPriceInBase(chain, comet, asset.priceFeed);
-        const priceUsd = priceInBase * basePriceUsd;
+        const priceUsd = basePricesAreUsd
+          ? priceInBase
+          : priceInBase * basePriceUsd;
       const borrowCollateralFactor =
         Number(asset.borrowCollateralFactor) / 1e18;
       const liquidationFactor = Number(asset.liquidationFactor) / 1e18;
@@ -398,6 +406,7 @@ export async function fetchCompoundUserReserves(
           baseDecimals: market.baseDecimals,
           basePriceUsd,
           basePriceInBase,
+        basePricesAreUsd,
           baseSupplyBalance: baseSupplyBalance.toString(),
           borrowBalance: borrowBalance.toString(),
           assets: debugAssets,
