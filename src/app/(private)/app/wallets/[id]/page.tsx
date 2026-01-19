@@ -88,6 +88,8 @@ export default function WalletDetailPage() {
     wallet?.chain ?? "polygon",
     wallet?.protocol ?? "aave",
   );
+  const errorMessage =
+    accountError?.message || reservesError?.message || ratesError?.message || "";
   const { notes, setNotes, saveNotes } = useWalletNotes(walletId);
 
   const [selectedDebtAsset, setSelectedDebtAsset] = useState<string>("");
@@ -332,10 +334,9 @@ export default function WalletDetailPage() {
             <p className="text-sm text-red-500">{deleteError}</p>
           ) : null}
         </div>
-        {accountError || reservesError || ratesError ? (
+        {errorMessage ? (
           <p className="text-sm text-red-500">
-            Falha ao atualizar dados on-chain. Verifica o RPC e o contrato do
-            protocolo.
+            Falha ao atualizar dados on-chain: {errorMessage}
           </p>
         ) : null}
         <p className="text-sm text-muted-foreground">

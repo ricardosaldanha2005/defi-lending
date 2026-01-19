@@ -34,7 +34,10 @@ export async function GET(request: Request) {
   } catch (error) {
     console.error("compound.user-account-data", error);
     return NextResponse.json(
-      { error: "Failed to fetch account data" },
+      {
+        error: "Failed to fetch account data",
+        detail: error instanceof Error ? error.message : "Unknown error",
+      },
       { status: 500 },
     );
   }

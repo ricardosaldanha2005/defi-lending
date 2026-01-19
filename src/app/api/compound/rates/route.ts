@@ -25,7 +25,10 @@ export async function GET(request: Request) {
   } catch (error) {
     console.error("compound.rates", error);
     return NextResponse.json(
-      { error: "Failed to fetch rates" },
+      {
+        error: "Failed to fetch rates",
+        detail: error instanceof Error ? error.message : "Unknown error",
+      },
       { status: 500 },
     );
   }

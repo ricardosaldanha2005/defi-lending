@@ -29,7 +29,10 @@ export async function GET(request: Request) {
   } catch (error) {
     console.error("compound.user-reserves", error);
     return NextResponse.json(
-      { error: "Failed to fetch user reserves" },
+      {
+        error: "Failed to fetch user reserves",
+        detail: error instanceof Error ? error.message : "Unknown error",
+      },
       { status: 500 },
     );
   }

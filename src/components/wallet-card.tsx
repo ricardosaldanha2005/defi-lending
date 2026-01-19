@@ -41,6 +41,8 @@ export function WalletCard({ wallet, onUpdateTargets, onRemove }: Props) {
     wallet.chain,
     wallet.protocol,
   );
+  const errorMessage =
+    accountError?.message || reservesError?.message || ratesError?.message || "";
 
   const hfMin = wallet.wallet_hf_targets?.hf_min ?? DEFAULT_HF_MIN;
   const hfMax = wallet.wallet_hf_targets?.hf_max ?? DEFAULT_HF_MAX;
@@ -131,10 +133,9 @@ export function WalletCard({ wallet, onUpdateTargets, onRemove }: Props) {
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
-        {accountError || reservesError || ratesError ? (
+        {errorMessage ? (
           <p className="text-xs text-red-500">
-            Falha ao atualizar dados on-chain. Verifica o RPC e o contrato do
-            protocolo.
+            Falha ao atualizar dados on-chain: {errorMessage}
           </p>
         ) : null}
         <div className="grid gap-3 rounded-lg border bg-muted/20 p-3 md:grid-cols-3">
