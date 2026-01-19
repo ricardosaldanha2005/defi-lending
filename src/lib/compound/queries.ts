@@ -149,7 +149,20 @@ async function fetchMarketData(chain: CompoundChain) {
   });
 }
 
-async function fetchPriceUsd(
+const CHAINLINK_ETH_USD_ARBITRUM =
+  "0x639Fe6ab55C921f74e7fac1ee960C0B6293ba612";
+
+const chainlinkAbi = [
+  {
+    type: "function",
+    name: "latestAnswer",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ type: "int256" }],
+  },
+] as const;
+
+async function fetchPriceInBase(
   chain: CompoundChain,
   comet: `0x${string}`,
   priceFeed: `0x${string}`,
@@ -168,12 +181,48 @@ async function fetchPriceUsd(
   }
 }
 
+async function fetchEthUsdPrice(chain: CompoundChain) {
+  if (chain !== "arbitrum") return 0;
+  const client = getPublicClient(chain);
+  try {
+    const price = await readContractWithRetry<bigint>(client, {
+      address: CHAINLINK_ETH_USD_ARBITRUM,
+      abi: chainlinkAbi,
+      functionName: "latestAnswer",
+    });
+    return Number(price) / PRICE_SCALE;
+  } catch {
+    return 0;
+  }
+}
+
+async function resolveBaseUsdPrice(
+  chain: CompoundChain,
+  baseSymbol: string,
+  basePriceInBase: number,
+) {
+  if ((baseSymbol === "WETH" || baseSymbol === "ETH") && basePriceInBase <= 2) {
+    const ethUsd = await fetchEthUsdPrice(chain);
+    if (ethUsd > 0) return ethUsd;
+  }
+  return basePriceInBase;
+}
+
 export async function fetchCompoundBaseAsset(
   chain: CompoundChain = DEFAULT_COMPOUND_CHAIN,
 ) {
   const comet = getCometAddress(chain);
   const market = await fetchMarketData(chain);
-  const basePriceUsd = await fetchPriceUsd(chain, comet, market.basePriceFeed);
+  const basePriceInBase = await fetchPriceInBase(
+    chain,
+    comet,
+    market.basePriceFeed,
+  );
+  const basePriceUsd = await resolveBaseUsdPrice(
+    chain,
+    market.baseSymbol,
+    basePriceInBase,
+  );
   return {
     symbol: market.baseSymbol,
     priceInUsd: basePriceUsd,
@@ -203,7 +252,16 @@ export async function fetchCompoundUserReserves(
       args: [address],
     }),
   ]);
-  const basePriceUsd = await fetchPriceUsd(chain, comet, market.basePriceFeed);
+  const basePriceInBase = await fetchPriceInBase(
+    chain,
+    comet,
+    market.basePriceFeed,
+  );
+  const basePriceUsd = await resolveBaseUsdPrice(
+    chain,
+    market.baseSymbol,
+    basePriceInBase,
+  );
 
   const collateralBalances = await mapWithConcurrency(
     market.assets,
@@ -258,7 +316,8 @@ export async function fetchCompoundUserReserves(
         }
         const decimals = scaleToDecimals(asset.scale);
         const amount = Number(formatUnits(rawBalance, decimals));
-        const priceUsd = await fetchPriceUsd(chain, comet, asset.priceFeed);
+        const priceInBase = await fetchPriceInBase(chain, comet, asset.priceFeed);
+        const priceUsd = priceInBase * basePriceUsd;
         return {
           symbol,
           asset: asset.asset,
@@ -275,7 +334,8 @@ export async function fetchCompoundUserReserves(
     collateralWithBalance.map(async ({ asset, balance }, index) => {
       const decimals = scaleToDecimals(asset.scale);
       const amount = Number(formatUnits(balance, decimals));
-      const priceUsd = await fetchPriceUsd(chain, comet, asset.priceFeed);
+        const priceInBase = await fetchPriceInBase(chain, comet, asset.priceFeed);
+        const priceUsd = priceInBase * basePriceUsd;
       const borrowCollateralFactor =
         Number(asset.borrowCollateralFactor) / 1e18;
       const liquidationFactor = Number(asset.liquidationFactor) / 1e18;
@@ -337,6 +397,7 @@ export async function fetchCompoundUserReserves(
       ? {
           baseDecimals: market.baseDecimals,
           basePriceUsd,
+          basePriceInBase,
           baseSupplyBalance: baseSupplyBalance.toString(),
           borrowBalance: borrowBalance.toString(),
           assets: debugAssets,
