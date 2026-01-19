@@ -1,6 +1,6 @@
-export type CompoundChain = "arbitrum";
+export type CompoundChain = "arbitrum" | "base";
 
-export const SUPPORTED_COMPOUND_CHAINS: CompoundChain[] = ["arbitrum"];
+export const SUPPORTED_COMPOUND_CHAINS: CompoundChain[] = ["arbitrum", "base"];
 
 export const DEFAULT_COMPOUND_CHAIN: CompoundChain = "arbitrum";
 
@@ -16,6 +16,13 @@ export function getCometAddress(chain: CompoundChain): `0x${string}` {
     const address = process.env.COMPOUND_COMET_ARBITRUM;
     if (!address) {
       throw new Error("Missing COMPOUND_COMET_ARBITRUM");
+    }
+    return address as `0x${string}`;
+  }
+  if (chain === "base") {
+    const address = process.env.COMPOUND_COMET_BASE;
+    if (!address) {
+      throw new Error("Missing COMPOUND_COMET_BASE");
     }
     return address as `0x${string}`;
   }

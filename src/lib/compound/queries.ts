@@ -1,6 +1,6 @@
 import { formatUnits, isAddress } from "viem";
 
-import { getPublicClient } from "@/lib/aave/client";
+import { getCompoundPublicClient } from "@/lib/compound/client";
 import { withCache } from "@/lib/cache";
 import { cometAbi, erc20Abi } from "@/lib/compound/cometAbi";
 import {
@@ -63,7 +63,7 @@ function isRateLimitError(error: unknown) {
 }
 
 async function readContractWithRetry<T>(
-  client: ReturnType<typeof getPublicClient>,
+  client: ReturnType<typeof getCompoundPublicClient>,
   args: Parameters<typeof client.readContract>[0],
   retries = 3,
   baseDelayMs = 400,
@@ -85,7 +85,7 @@ async function readContractWithRetry<T>(
 async function fetchMarketData(chain: CompoundChain) {
   return withCache(`compound:market:${chain}`, MARKET_TTL, async () => {
     const comet = getCometAddress(chain);
-    const client = getPublicClient(chain);
+    const client = getCompoundPublicClient(chain);
 
     const baseToken = await readContractWithRetry<`0x${string}`>(client, {
       address: comet,
@@ -167,7 +167,7 @@ async function fetchPriceInBase(
   comet: `0x${string}`,
   priceFeed: `0x${string}`,
 ) {
-  const client = getPublicClient(chain);
+  const client = getCompoundPublicClient(chain);
   try {
     const price = await readContractWithRetry<bigint>(client, {
       address: comet,
@@ -183,7 +183,7 @@ async function fetchPriceInBase(
 
 async function fetchEthUsdPrice(chain: CompoundChain) {
   if (chain !== "arbitrum") return 0;
-  const client = getPublicClient(chain);
+  const client = getCompoundPublicClient(chain);
   try {
     const price = await readContractWithRetry<bigint>(client, {
       address: CHAINLINK_ETH_USD_ARBITRUM,
@@ -235,7 +235,7 @@ export async function fetchCompoundUserReserves(
   debug = false,
 ) {
   const comet = getCometAddress(chain);
-  const client = getPublicClient(chain);
+  const client = getCompoundPublicClient(chain);
   const market = await fetchMarketData(chain);
 
   const [borrowBalance, baseSupplyBalance] = await Promise.all([

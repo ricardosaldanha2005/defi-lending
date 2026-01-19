@@ -70,7 +70,11 @@ export default function DashboardPage() {
   const onProtocolChange = (value: string) => {
     const nextProtocol = value as Protocol;
     setProtocol(nextProtocol);
-    if (nextProtocol === "compound" && chain !== "arbitrum") {
+    if (
+      nextProtocol === "compound" &&
+      chain !== "arbitrum" &&
+      chain !== "base"
+    ) {
       setChain("arbitrum");
     }
   };
@@ -340,7 +344,10 @@ export default function DashboardPage() {
                         <SelectItem value="arbitrum">Arbitrum</SelectItem>
                       </>
                     ) : (
-                      <SelectItem value="arbitrum">Arbitrum</SelectItem>
+                      <>
+                        <SelectItem value="arbitrum">Arbitrum</SelectItem>
+                        <SelectItem value="base">Base</SelectItem>
+                      </>
                     )}
                   </SelectContent>
                 </Select>

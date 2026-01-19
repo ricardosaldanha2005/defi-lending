@@ -106,6 +106,8 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=
 POLYGON_RPC_URL=https://polygon-rpc.com
 ARBITRUM_RPC_URL=https://arb1.arbitrum.io/rpc
 COMPOUND_COMET_ARBITRUM=
+BASE_RPC_URL=https://mainnet.base.org
+COMPOUND_COMET_BASE=
 N8N_WEBHOOK_URL=https://ricardon8n.duckdns.org/webhook-test/defi-lending
 ```
 
