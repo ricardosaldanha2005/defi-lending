@@ -390,17 +390,18 @@ export default function DashboardPage() {
                 onData={(data) =>
                   setSummary((prev) => {
                     const current = prev[wallet.id];
+                    const same = (a: unknown, b: unknown) => Object.is(a, b);
                     if (
                       current &&
-                      current.collateralUsd === data.collateralUsd &&
-                      current.debtUsd === data.debtUsd &&
-                      current.hf === data.hf &&
-                      current.lt === data.lt &&
-                      current.name === data.name &&
-                      current.protocol === data.protocol &&
-                      current.chain === data.chain &&
-                      current.hfMin === data.hfMin &&
-                      current.hfMax === data.hfMax
+                      same(current.collateralUsd, data.collateralUsd) &&
+                      same(current.debtUsd, data.debtUsd) &&
+                      same(current.hf, data.hf) &&
+                      same(current.lt, data.lt) &&
+                      same(current.name, data.name) &&
+                      same(current.protocol, data.protocol) &&
+                      same(current.chain, data.chain) &&
+                      same(current.hfMin, data.hfMin) &&
+                      same(current.hfMax, data.hfMax)
                     ) {
                       return prev;
                     }
