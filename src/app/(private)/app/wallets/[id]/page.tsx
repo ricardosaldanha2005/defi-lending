@@ -73,17 +73,18 @@ export default function WalletDetailPage() {
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
 
-  const { data: accountData } = useProtocolAccountData(
+  const { data: accountData, error: accountError } = useProtocolAccountData(
     wallet?.address,
     wallet?.chain ?? "polygon",
     wallet?.protocol ?? "aave",
   );
-  const { data: userReservesData } = useProtocolUserReserves(
+  const { data: userReservesData, error: reservesError } =
+    useProtocolUserReserves(
     wallet?.address,
     wallet?.chain ?? "polygon",
     wallet?.protocol ?? "aave",
   );
-  const { data: ratesData } = useProtocolRates(
+  const { data: ratesData, error: ratesError } = useProtocolRates(
     wallet?.chain ?? "polygon",
     wallet?.protocol ?? "aave",
   );
@@ -331,6 +332,12 @@ export default function WalletDetailPage() {
             <p className="text-sm text-red-500">{deleteError}</p>
           ) : null}
         </div>
+        {accountError || reservesError || ratesError ? (
+          <p className="text-sm text-red-500">
+            Falha ao atualizar dados on-chain. Verifica o RPC e o contrato do
+            protocolo.
+          </p>
+        ) : null}
         <p className="text-sm text-muted-foreground">
           Estratégia: Lending + Borrow (Bearmarket bias)
         </p>

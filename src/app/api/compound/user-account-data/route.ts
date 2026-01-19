@@ -4,6 +4,8 @@ import { isAddress } from "viem";
 import { fetchCompoundAccountData } from "@/lib/compound/queries";
 import { parseCompoundChain } from "@/lib/compound/chains";
 
+export const dynamic = "force-dynamic";
+
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const address = searchParams.get("address");

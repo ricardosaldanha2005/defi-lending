@@ -4,7 +4,27 @@ import useSWR from "swr";
 
 import { Protocol } from "@/lib/protocols";
 
-const fetcher = (url: string) => fetch(url).then((res) => res.json());
+const fetcher = async (url: string) => {
+  const response = await fetch(url, { cache: "no-store" });
+  const text = await response.text();
+  const data = text ? safeJsonParse(text) : null;
+  if (!response.ok) {
+    const message =
+      (data && typeof data === "object" && "error" in data && data.error) ||
+      text ||
+      "Request failed";
+    throw new Error(typeof message === "string" ? message : "Request failed");
+  }
+  return data;
+};
+
+function safeJsonParse(value: string) {
+  try {
+    return JSON.parse(value);
+  } catch {
+    return null;
+  }
+}
 
 function buildUrl(
   protocol: Protocol,

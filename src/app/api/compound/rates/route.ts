@@ -3,6 +3,8 @@ import { NextResponse } from "next/server";
 import { fetchCompoundBaseAsset } from "@/lib/compound/queries";
 import { parseCompoundChain } from "@/lib/compound/chains";
 
+export const dynamic = "force-dynamic";
+
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const chain = parseCompoundChain(searchParams.get("chain")) ?? "arbitrum";

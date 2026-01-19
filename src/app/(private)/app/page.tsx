@@ -729,17 +729,23 @@ function StrategySummaryRow({
   hfMax: number;
 }) {
   const { data } = useProtocolAccountData(address, chain, protocol);
-  const collateralUsd = data?.totalCollateralUsd ?? 0;
-  const debtUsd = data?.totalDebtUsd ?? 0;
-  const lt = data?.currentLiquidationThreshold ?? 0;
-  const hf =
-    debtUsd > 0 && lt > 0 ? (collateralUsd * (lt / 10000)) / debtUsd : Infinity;
-  const status = useMemo(
-    () => getStatus(hf, hfMin, hfMax),
-    [hf, hfMax, hfMin],
-  );
+  const hasData = Boolean(data);
+  const collateralUsd = hasData ? data.totalCollateralUsd ?? 0 : Number.NaN;
+  const debtUsd = hasData ? data.totalDebtUsd ?? 0 : Number.NaN;
+  const lt = hasData ? data.currentLiquidationThreshold ?? 0 : 0;
+  const hf = hasData
+    ? debtUsd > 0 && lt > 0
+      ? (collateralUsd * (lt / 10000)) / debtUsd
+      : Infinity
+    : Number.NaN;
+  const status = useMemo(() => {
+    if (!hasData) return "Sem dados";
+    return getStatus(hf, hfMin, hfMax);
+  }, [hasData, hf, hfMax, hfMin]);
   const statusVariant =
-    status === "Crítico"
+    status === "Sem dados"
+      ? "secondary"
+      : status === "Crítico"
       ? "destructive"
       : status === "Risco"
         ? "secondary"
@@ -747,7 +753,9 @@ function StrategySummaryRow({
           ? "outline"
           : "default";
   const statusClassName =
-    status === "OK"
+    status === "Sem dados"
+      ? "bg-muted text-muted-foreground border-transparent"
+      : status === "OK"
       ? "bg-emerald-600 text-white border-transparent"
       : status === "Risco"
         ? "bg-amber-500 text-white border-transparent"
@@ -762,6 +770,20 @@ function StrategySummaryRow({
   });
 
   useEffect(() => {
+    if (!hasData) {
+      onData({
+        collateralUsd: Number.NaN,
+        debtUsd: Number.NaN,
+        hf: Number.NaN,
+        lt: 0,
+        name,
+        chain,
+        protocol,
+        hfMin,
+        hfMax,
+      });
+      return;
+    }
     onData({
       collateralUsd,
       debtUsd,
@@ -784,6 +806,7 @@ function StrategySummaryRow({
     hfMax,
     onData,
     walletId,
+    hasData,
   ]);
 
   useEffect(() => {
