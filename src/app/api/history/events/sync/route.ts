@@ -130,11 +130,13 @@ export async function POST(request: Request) {
         ? Number(event.amountUsdRaw)
         : null;
       const amountNumeric = event.amount ? Number(event.amount) : NaN;
+      const amountUsdNumeric =
+        amountUsd !== null && Number.isFinite(amountUsd) ? amountUsd : NaN;
       const priceUsd =
         Number.isFinite(amountNumeric) &&
-        Number.isFinite(amountUsd ?? NaN) &&
+        Number.isFinite(amountUsdNumeric) &&
         amountNumeric > 0
-          ? amountUsd / amountNumeric
+          ? amountUsdNumeric / amountNumeric
           : null;
 
       return {
@@ -153,7 +155,7 @@ export async function POST(request: Request) {
         amount_raw: event.amountRaw,
         amount: event.amount,
         price_usd: Number.isFinite(priceUsd ?? NaN) ? priceUsd : null,
-        amount_usd: Number.isFinite(amountUsd ?? NaN) ? amountUsd : null,
+        amount_usd: Number.isFinite(amountUsdNumeric) ? amountUsdNumeric : null,
       };
     });
 
