@@ -405,6 +405,34 @@ async function resolveAaveSchemaConfig(url: string): Promise<AaveSchemaConfig[]>
     return configs;
   }
 
+  const fallbackNames = [
+    "deposits",
+    "withdraws",
+    "borrows",
+    "repays",
+    "liquidates",
+    "transfers",
+    "flashloans",
+    "events",
+    "event",
+  ];
+  const fallbackFields = fields.filter((field) =>
+    fallbackNames.includes(field.name),
+  );
+  if (fallbackFields.length > 0) {
+    return fallbackFields.map((field) => ({
+      queryField: field.name,
+      eventTypeName: field.name,
+      fields: {
+        id: "id",
+        timestamp: "timestamp",
+        amount: "amount",
+      },
+      orderByField: "timestamp",
+      fallbackEventType: field.name,
+    }));
+  }
+
   throw new Error(
     `Aave subgraph has no transaction query field. Available: ${fields
       .map((field) => field.name)
