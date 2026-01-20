@@ -84,6 +84,7 @@ type FetchParams = {
   chain: string;
   address: string;
   fromTimestamp: number;
+  maxEvents?: number;
 };
 
 const AAVE_SUBGRAPHS: Record<string, string | undefined> = {
@@ -220,6 +221,7 @@ export async function fetchSubgraphEvents({
   chain,
   address,
   fromTimestamp,
+  maxEvents,
 }: FetchParams): Promise<NormalizedEvent[]> {
   const url = getSubgraphUrl(protocol, chain);
   if (!url) {
@@ -228,17 +230,19 @@ export async function fetchSubgraphEvents({
   const lowerAddress = address.toLowerCase();
 
   if (protocol === "compound") {
-    return fetchCompoundEvents(url, lowerAddress, fromTimestamp);
+    return fetchCompoundEvents(url, lowerAddress, fromTimestamp, maxEvents);
   }
-  return fetchAaveEvents(url, lowerAddress, fromTimestamp);
+  return fetchAaveEvents(url, lowerAddress, fromTimestamp, maxEvents);
 }
 
 async function fetchAaveEvents(
   url: string,
   address: string,
   fromTimestamp: number,
+  maxEvents?: number,
 ) {
   const events: NormalizedEvent[] = [];
+  const limit = maxEvents && maxEvents > 0 ? maxEvents : null;
   const schemas = await getAaveSchemaConfig(url);
   for (const schema of schemas) {
     const selection = buildAaveSelection(schema);
@@ -328,9 +332,15 @@ async function fetchAaveEvents(
             : undefined,
         });
         if (normalized) events.push(normalized);
+        if (limit && events.length >= limit) {
+          return events.slice(0, limit);
+        }
       }
       if (batch.length < PAGE_SIZE) break;
       skip += PAGE_SIZE;
+    }
+    if (limit && events.length >= limit) {
+      break;
     }
   }
   return events;
@@ -644,6 +654,7 @@ async function fetchCompoundEvents(
   url: string,
   address: string,
   fromTimestamp: number,
+  maxEvents?: number,
 ) {
   const schema = await getCompoundSchemaConfig(url);
   const selection = buildCompoundSelection(schema);
@@ -673,6 +684,7 @@ async function fetchCompoundEvents(
   `;
 
   const events: NormalizedEvent[] = [];
+  const limit = maxEvents && maxEvents > 0 ? maxEvents : null;
   let skip = 0;
   while (true) {
     const data = await postGraphQL<Record<string, Array<Record<string, unknown>> | undefined>>(
@@ -721,6 +733,9 @@ async function fetchCompoundEvents(
           : undefined,
       });
       if (normalized) events.push(normalized);
+      if (limit && events.length >= limit) {
+        return events.slice(0, limit);
+      }
     }
     if (batch.length < PAGE_SIZE) break;
     skip += PAGE_SIZE;

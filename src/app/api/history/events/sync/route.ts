@@ -72,6 +72,12 @@ export async function POST(request: Request) {
   const body = await request.json().catch(() => ({}));
   const walletId = body?.walletId as string | undefined;
   const includePrices = Boolean(body?.includePrices);
+  const maxDaysRaw = Number(body?.maxDays ?? 90);
+  const maxDays = Number.isFinite(maxDaysRaw) ? Math.max(1, maxDaysRaw) : 90;
+  const maxEventsRaw = Number(body?.maxEvents ?? 2000);
+  const maxEvents = Number.isFinite(maxEventsRaw)
+    ? Math.max(100, Math.min(10000, maxEventsRaw))
+    : 2000;
   if (!walletId) {
     return NextResponse.json({ error: "walletId required" }, { status: 400 });
   }
@@ -107,13 +113,16 @@ export async function POST(request: Request) {
   const lastTimestamp = toTimestamp(
     (syncState as SyncRow | null)?.last_synced_timestamp ?? null,
   );
+  const minTimestamp = Math.floor(Date.now() / 1000) - maxDays * 24 * 60 * 60;
+  const fromTimestamp = Math.max(lastTimestamp, minTimestamp);
 
   try {
     const events = await fetchSubgraphEvents({
       protocol,
       chain: wallet.chain,
       address: wallet.address,
-      fromTimestamp: lastTimestamp,
+      fromTimestamp,
+      maxEvents,
     });
 
     const inserts: StrategyEventInsert[] = events.map((event) => ({
