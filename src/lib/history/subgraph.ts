@@ -143,6 +143,10 @@ function unwrapTypeName(typeRef: TypeRef | null | undefined): string | null {
   return null;
 }
 
+function isRequiredArg(typeRef: TypeRef | null | undefined) {
+  return typeRef?.kind === "NON_NULL";
+}
+
 function pickField(
   fields: Array<{ name: string }>,
   candidates: string[],
@@ -386,6 +390,14 @@ async function buildAaveConfigFromField(
   url: string,
   queryField: QueryFieldInfo,
 ): Promise<AaveSchemaConfig | null> {
+  const requiredArgs = queryField.args
+    .filter((arg) => isRequiredArg(arg.type))
+    .map((arg) => arg.name);
+  const supportedRequired = new Set(["user", "account", "from", "skip"]);
+  if (requiredArgs.some((arg) => !supportedRequired.has(arg))) {
+    return null;
+  }
+
   const eventTypeName = unwrapTypeName(queryField.type);
   if (!eventTypeName) return null;
 
