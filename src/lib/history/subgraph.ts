@@ -17,6 +17,41 @@ type NormalizedEvent = {
   amount: string | null;
 };
 
+type TypeRef = {
+  kind: string;
+  name?: string | null;
+  ofType?: TypeRef | null;
+};
+
+type QueryFieldInfo = {
+  name: string;
+  args: Array<{ name: string; type: TypeRef }>;
+  type: TypeRef;
+};
+
+type CompoundSchemaConfig = {
+  queryField: string;
+  eventTypeName: string;
+  fields: {
+    id?: string;
+    timestamp?: string;
+    txHash?: string;
+    logIndex?: string;
+    blockNumber?: string;
+    eventType?: string;
+    amount?: string;
+  };
+  whereAccountField?: string;
+  whereTimestampField?: string;
+  orderByField?: string;
+  assetField?: string;
+  assetFields?: {
+    id?: string;
+    symbol?: string;
+    decimals?: string;
+  };
+};
+
 type FetchParams = {
   protocol: Protocol;
   chain: string;
@@ -35,6 +70,7 @@ const COMPOUND_SUBGRAPHS: Record<string, string | undefined> = {
 };
 
 const PAGE_SIZE = 1000;
+const compoundSchemaCache = new Map<string, Promise<CompoundSchemaConfig>>();
 
 function getSubgraphUrl(protocol: Protocol, chain: string) {
   if (protocol === "compound") {
@@ -69,6 +105,30 @@ async function postGraphQL<T>(
 
 function isIntegerString(value: string) {
   return /^[0-9]+$/.test(value);
+}
+
+function unwrapTypeName(typeRef: TypeRef | null | undefined): string | null {
+  let current = typeRef;
+  while (current) {
+    if (current.kind === "NON_NULL" || current.kind === "LIST") {
+      current = current.ofType ?? null;
+      continue;
+    }
+    return current.name ?? null;
+  }
+  return null;
+}
+
+function pickField(
+  fields: Array<{ name: string }>,
+  candidates: string[],
+): string | undefined {
+  for (const candidate of candidates) {
+    if (fields.some((field) => field.name === candidate)) {
+      return candidate;
+    }
+  }
+  return undefined;
 }
 
 function normalizeAmount(
@@ -208,28 +268,29 @@ async function fetchCompoundEvents(
   address: string,
   fromTimestamp: number,
 ) {
+  const schema = await getCompoundSchemaConfig(url);
+  const selection = buildCompoundSelection(schema);
+  const whereEntries: string[] = [];
+  if (schema.whereAccountField) {
+    whereEntries.push(`${schema.whereAccountField}: $user`);
+  }
+  if (schema.whereTimestampField) {
+    whereEntries.push(`${schema.whereTimestampField}: $from`);
+  }
+  const whereClause = whereEntries.length
+    ? `where: { ${whereEntries.join(", ")} }`
+    : "";
+  const orderByClause = schema.orderByField
+    ? `orderBy: ${schema.orderByField}, orderDirection: asc`
+    : "";
+  const args = [whereClause, orderByClause, `first: ${PAGE_SIZE}`, `skip: $skip`]
+    .filter(Boolean)
+    .join(", ");
+
   const query = `
     query AccountEvents($user: String!, $from: Int!, $skip: Int!) {
-      accountEvents(
-        where: { account: $user, timestamp_gte: $from }
-        orderBy: timestamp
-        orderDirection: asc
-        first: ${PAGE_SIZE}
-        skip: $skip
-      ) {
-        id
-        timestamp
-        eventType
-        type
-        amount
-        logIndex
-        blockNumber
-        transactionHash
-        asset {
-          id
-          symbol
-          decimals
-        }
+      ${schema.queryField}(${args}) {
+        ${selection}
       }
     }
   `;
@@ -237,26 +298,50 @@ async function fetchCompoundEvents(
   const events: NormalizedEvent[] = [];
   let skip = 0;
   while (true) {
-    const data = await postGraphQL<{
-      accountEvents?: Array<Record<string, unknown>>;
-    }>(url, query, {
+    const data = await postGraphQL<Record<string, Array<Record<string, unknown>> | undefined>>(
+      url,
+      query,
+      {
       user: address,
       from: Math.max(0, Math.floor(fromTimestamp)),
       skip,
     });
-    const batch = data.accountEvents ?? [];
+    const batch = data[schema.queryField] ?? [];
     for (const raw of batch) {
-      const asset = (raw.asset as Record<string, unknown>) ?? null;
+      const asset =
+        schema.assetField && raw[schema.assetField]
+          ? ((raw[schema.assetField] as Record<string, unknown>) ?? null)
+          : null;
+      const txHashField = schema.fields.txHash;
+      const txHash =
+        (txHashField ? (raw[txHashField] as string | undefined) : undefined) ??
+        ((raw.id as string | undefined) ?? "");
       const normalized = normalizeEvent({
-        txHash: (raw.transactionHash as string) ?? (raw.txHash as string),
-        logIndex: raw.logIndex as number | string | undefined,
-        blockNumber: raw.blockNumber as number | string | undefined,
-        timestamp: raw.timestamp as number | string | undefined,
-        eventType: (raw.eventType as string) ?? (raw.type as string),
-        assetAddress: asset?.id as string | undefined,
-        assetSymbol: asset?.symbol as string | undefined,
-        assetDecimals: asset?.decimals as number | string | undefined,
-        amountRaw: raw.amount as string | undefined,
+        txHash,
+        logIndex: schema.fields.logIndex
+          ? (raw[schema.fields.logIndex] as number | string | undefined)
+          : undefined,
+        blockNumber: schema.fields.blockNumber
+          ? (raw[schema.fields.blockNumber] as number | string | undefined)
+          : undefined,
+        timestamp: schema.fields.timestamp
+          ? (raw[schema.fields.timestamp] as number | string | undefined)
+          : undefined,
+        eventType: schema.fields.eventType
+          ? (raw[schema.fields.eventType] as string | undefined)
+          : undefined,
+        assetAddress: schema.assetFields?.id
+          ? (asset?.[schema.assetFields.id] as string | undefined)
+          : undefined,
+        assetSymbol: schema.assetFields?.symbol
+          ? (asset?.[schema.assetFields.symbol] as string | undefined)
+          : undefined,
+        assetDecimals: schema.assetFields?.decimals
+          ? (asset?.[schema.assetFields.decimals] as number | string | undefined)
+          : undefined,
+        amountRaw: schema.fields.amount
+          ? (raw[schema.fields.amount] as string | undefined)
+          : undefined,
       });
       if (normalized) events.push(normalized);
     }
@@ -264,4 +349,190 @@ async function fetchCompoundEvents(
     skip += PAGE_SIZE;
   }
   return events;
+}
+
+async function getCompoundSchemaConfig(url: string): Promise<CompoundSchemaConfig> {
+  if (!compoundSchemaCache.has(url)) {
+    compoundSchemaCache.set(url, resolveCompoundSchemaConfig(url));
+  }
+  return compoundSchemaCache.get(url)!;
+}
+
+async function resolveCompoundSchemaConfig(
+  url: string,
+): Promise<CompoundSchemaConfig> {
+  const data = await postGraphQL<{
+    __schema?: { queryType?: { fields?: QueryFieldInfo[] } };
+  }>(
+    url,
+    `
+      query SchemaInfo {
+        __schema {
+          queryType {
+            fields {
+              name
+              type { kind name ofType { kind name ofType { kind name } } }
+              args {
+                name
+                type { kind name ofType { kind name ofType { kind name } } }
+              }
+            }
+          }
+        }
+      }
+    `,
+    {},
+  );
+
+  const fields = data.__schema?.queryType?.fields ?? [];
+  const queryFieldName =
+    pickField(fields, ["accountEvents", "events", "accountEvent", "event"]) ??
+    fields.find((field) => field.name.toLowerCase().includes("event"))?.name ??
+    "accountEvents";
+  const queryField = fields.find((field) => field.name === queryFieldName);
+  if (!queryField) {
+    throw new Error("Compound subgraph has no event query field.");
+  }
+
+  const eventTypeName = unwrapTypeName(queryField.type);
+  if (!eventTypeName) {
+    throw new Error("Compound subgraph event type not found.");
+  }
+
+  const eventTypeInfo = await postGraphQL<{
+    __type?: { fields?: Array<{ name: string; type: TypeRef }> };
+  }>(
+    url,
+    `
+      query EventType($name: String!) {
+        __type(name: $name) {
+          fields {
+            name
+            type { kind name ofType { kind name ofType { kind name } } }
+          }
+        }
+      }
+    `,
+    { name: eventTypeName },
+  );
+
+  const eventFields = eventTypeInfo.__type?.fields ?? [];
+  const timestampField = pickField(eventFields, [
+    "timestamp",
+    "blockTimestamp",
+    "block_timestamp",
+  ]);
+  const txHashField = pickField(eventFields, [
+    "transactionHash",
+    "txHash",
+    "hash",
+  ]);
+  const logIndexField = pickField(eventFields, ["logIndex", "log_index"]);
+  const blockNumberField = pickField(eventFields, ["blockNumber", "block_number"]);
+  const eventTypeField = pickField(eventFields, ["eventType", "type", "action"]);
+  const amountField = pickField(eventFields, ["amount", "amountUsd", "amountUSD"]);
+  const assetField = pickField(eventFields, ["asset", "token"]);
+
+  let assetFields: CompoundSchemaConfig["assetFields"];
+  if (assetField) {
+    const assetTypeName = unwrapTypeName(
+      eventFields.find((field) => field.name === assetField)?.type,
+    );
+    if (assetTypeName) {
+      const assetTypeInfo = await postGraphQL<{
+        __type?: { fields?: Array<{ name: string }> };
+      }>(
+        url,
+        `
+          query AssetType($name: String!) {
+            __type(name: $name) {
+              fields { name }
+            }
+          }
+        `,
+        { name: assetTypeName },
+      );
+      const assetTypeFields = assetTypeInfo.__type?.fields ?? [];
+      assetFields = {
+        id: pickField(assetTypeFields, ["id", "tokenAddress", "address"]),
+        symbol: pickField(assetTypeFields, ["symbol", "name"]),
+        decimals: pickField(assetTypeFields, ["decimals"]),
+      };
+    }
+  }
+
+  const whereArg = queryField.args.find((arg) => arg.name === "where");
+  const whereTypeName = whereArg ? unwrapTypeName(whereArg.type) : null;
+  let whereAccountField: string | undefined;
+  let whereTimestampField: string | undefined;
+  if (whereTypeName) {
+    const whereTypeInfo = await postGraphQL<{
+      __type?: { inputFields?: Array<{ name: string }> };
+    }>(
+      url,
+      `
+        query WhereType($name: String!) {
+          __type(name: $name) {
+            inputFields { name }
+          }
+        }
+      `,
+      { name: whereTypeName },
+    );
+    const whereFields = whereTypeInfo.__type?.inputFields ?? [];
+    whereAccountField = pickField(whereFields, [
+      "account",
+      "user",
+      "account_",
+      "user_",
+    ]);
+    whereTimestampField = pickField(whereFields, [
+      "timestamp_gte",
+      "blockTimestamp_gte",
+      "timestamp_gt",
+    ]);
+  }
+
+  return {
+    queryField: queryField.name,
+    eventTypeName,
+    fields: {
+      id: pickField(eventFields, ["id"]),
+      timestamp: timestampField,
+      txHash: txHashField,
+      logIndex: logIndexField,
+      blockNumber: blockNumberField,
+      eventType: eventTypeField,
+      amount: amountField,
+    },
+    whereAccountField,
+    whereTimestampField,
+    orderByField: timestampField,
+    assetField,
+    assetFields,
+  };
+}
+
+function buildCompoundSelection(schema: CompoundSchemaConfig) {
+  const fields: string[] = [];
+  if (schema.fields.id) fields.push(schema.fields.id);
+  if (schema.fields.timestamp) fields.push(schema.fields.timestamp);
+  if (schema.fields.eventType) fields.push(schema.fields.eventType);
+  if (schema.fields.amount) fields.push(schema.fields.amount);
+  if (schema.fields.logIndex) fields.push(schema.fields.logIndex);
+  if (schema.fields.blockNumber) fields.push(schema.fields.blockNumber);
+  if (schema.fields.txHash) fields.push(schema.fields.txHash);
+  if (schema.assetField) {
+    const assetFields = [
+      schema.assetFields?.id,
+      schema.assetFields?.symbol,
+      schema.assetFields?.decimals,
+    ].filter(Boolean);
+    if (assetFields.length > 0) {
+      fields.push(
+        `${schema.assetField} { ${assetFields.join(" ")} }`,
+      );
+    }
+  }
+  return fields.join("\n");
 }
