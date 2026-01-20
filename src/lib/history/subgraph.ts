@@ -344,20 +344,50 @@ async function resolveAaveSchemaConfig(url: string): Promise<AaveSchemaConfig> {
   );
 
   const fields = data.__schema?.queryType?.fields ?? [];
+  const namedCandidates = [
+    "userTransactions",
+    "transactions",
+    "userTransaction",
+    "userTransactionsV2",
+    "userActivities",
+    "userActivity",
+    "activities",
+    "events",
+  ];
   const queryFieldName =
-    pickField(fields, ["userTransactions", "transactions", "userTransaction"]) ??
+    pickField(fields, namedCandidates) ??
     fields.find((field) => field.name.toLowerCase().includes("transaction"))
       ?.name ??
-    "userTransactions";
-  const queryField = fields.find((field) => field.name === queryFieldName);
-  if (!queryField) {
-    throw new Error("Aave subgraph has no transaction query field.");
+    fields.find((field) => field.name.toLowerCase().includes("activity"))?.name;
+  const directMatch = queryFieldName
+    ? fields.find((field) => field.name === queryFieldName)
+    : undefined;
+
+  const resolved = directMatch
+    ? await buildAaveConfigFromField(url, directMatch)
+    : null;
+  if (resolved) {
+    return resolved;
   }
 
-  const eventTypeName = unwrapTypeName(queryField.type);
-  if (!eventTypeName) {
-    throw new Error("Aave transaction type not found.");
+  for (const field of fields) {
+    const candidate = await buildAaveConfigFromField(url, field);
+    if (candidate) return candidate;
   }
+
+  throw new Error(
+    `Aave subgraph has no transaction query field. Available: ${fields
+      .map((field) => field.name)
+      .join(", ")}`,
+  );
+}
+
+async function buildAaveConfigFromField(
+  url: string,
+  queryField: QueryFieldInfo,
+): Promise<AaveSchemaConfig | null> {
+  const eventTypeName = unwrapTypeName(queryField.type);
+  if (!eventTypeName) return null;
 
   const eventTypeInfo = await postGraphQL<{
     __type?: { fields?: Array<{ name: string; type: TypeRef }> };
@@ -392,6 +422,9 @@ async function resolveAaveSchemaConfig(url: string): Promise<AaveSchemaConfig> {
   const actionField = pickField(eventFields, ["action", "eventType", "type"]);
   const amountField = pickField(eventFields, ["amount", "amountUSD", "amountUsd"]);
   const reserveField = pickField(eventFields, ["reserve", "asset", "token"]);
+  if (!timestampField || !amountField) {
+    return null;
+  }
 
   let reserveFields: AaveSchemaConfig["reserveFields"];
   if (reserveField) {
