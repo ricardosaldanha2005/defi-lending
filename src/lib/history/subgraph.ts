@@ -75,6 +75,7 @@ type AaveSchemaConfig = {
     underlyingAsset?: string;
     decimals?: string;
   };
+  fallbackEventType?: string;
 };
 
 type FetchParams = {
@@ -96,7 +97,7 @@ const COMPOUND_SUBGRAPHS: Record<string, string | undefined> = {
 
 const PAGE_SIZE = 1000;
 const compoundSchemaCache = new Map<string, Promise<CompoundSchemaConfig>>();
-const aaveSchemaCache = new Map<string, Promise<AaveSchemaConfig>>();
+const aaveSchemaCache = new Map<string, Promise<AaveSchemaConfig[]>>();
 
 function getSubgraphUrl(protocol: Protocol, chain: string) {
   if (protocol === "compound") {
@@ -236,109 +237,110 @@ async function fetchAaveEvents(
   address: string,
   fromTimestamp: number,
 ) {
-  const schema = await getAaveSchemaConfig(url);
-  const selection = buildAaveSelection(schema);
-  const whereEntries: string[] = [];
-  if (schema.whereUserField) {
-    whereEntries.push(`${schema.whereUserField}: $user`);
-  }
-  if (schema.whereTimestampField) {
-    whereEntries.push(`${schema.whereTimestampField}: $from`);
-  }
-  const directArgs: string[] = [];
-  if (schema.directUserArg) {
-    directArgs.push(`${schema.directUserArg}: $user`);
-  }
-  if (schema.directTimestampArg) {
-    directArgs.push(`${schema.directTimestampArg}: $from`);
-  }
-  const whereClause = whereEntries.length
-    ? `where: { ${whereEntries.join(", ")} }`
-    : "";
-  const orderByClause = schema.orderByField
-    ? `orderBy: ${schema.orderByField}, orderDirection: asc`
-    : "";
-  const args = [
-    ...directArgs,
-    whereClause,
-    orderByClause,
-    `first: ${PAGE_SIZE}`,
-    `skip: $skip`,
-  ]
-    .filter(Boolean)
-    .join(", ");
-
-  const query = `
-    query UserTransactions($user: String!, $from: Int!, $skip: Int!) {
-      ${schema.queryField}(${args}) {
-        ${selection}
-      }
-    }
-  `;
-
   const events: NormalizedEvent[] = [];
-  let skip = 0;
-  while (true) {
-    const data = await postGraphQL<
-      Record<string, Array<Record<string, unknown>> | undefined>
-    >(url, query, {
-      user: address,
-      from: Math.max(0, Math.floor(fromTimestamp)),
-      skip,
-    });
-    const batch = data[schema.queryField] ?? [];
-    for (const raw of batch) {
-      const reserve =
-        schema.reserveField && raw[schema.reserveField]
-          ? ((raw[schema.reserveField] as Record<string, unknown>) ?? null)
-          : null;
-      const txHashField = schema.fields.txHash;
-      const txHash =
-        (txHashField ? (raw[txHashField] as string | undefined) : undefined) ??
-        ((raw.id as string | undefined) ?? "");
-      const normalized = normalizeEvent({
-        txHash,
-        logIndex: schema.fields.logIndex
-          ? (raw[schema.fields.logIndex] as number | string | undefined)
-          : undefined,
-        blockNumber: schema.fields.blockNumber
-          ? (raw[schema.fields.blockNumber] as number | string | undefined)
-          : undefined,
-        timestamp: schema.fields.timestamp
-          ? (raw[schema.fields.timestamp] as number | string | undefined)
-          : undefined,
-        eventType: schema.fields.action
-          ? (raw[schema.fields.action] as string | undefined)
-          : undefined,
-        assetAddress: schema.reserveFields?.underlyingAsset
-          ? (reserve?.[schema.reserveFields.underlyingAsset] as string | undefined)
-          : undefined,
-        assetSymbol: schema.reserveFields?.symbol
-          ? (reserve?.[schema.reserveFields.symbol] as string | undefined)
-          : undefined,
-        assetDecimals: schema.reserveFields?.decimals
-          ? (reserve?.[schema.reserveFields.decimals] as number | string | undefined)
-          : undefined,
-        amountRaw: schema.fields.amount
-          ? (raw[schema.fields.amount] as string | undefined)
-          : undefined,
-      });
-      if (normalized) events.push(normalized);
+  const schemas = await getAaveSchemaConfig(url);
+  for (const schema of schemas) {
+    const selection = buildAaveSelection(schema);
+    const whereEntries: string[] = [];
+    if (schema.whereUserField) {
+      whereEntries.push(`${schema.whereUserField}: $user`);
     }
-    if (batch.length < PAGE_SIZE) break;
-    skip += PAGE_SIZE;
+    if (schema.whereTimestampField) {
+      whereEntries.push(`${schema.whereTimestampField}: $from`);
+    }
+    const directArgs: string[] = [];
+    if (schema.directUserArg) {
+      directArgs.push(`${schema.directUserArg}: $user`);
+    }
+    if (schema.directTimestampArg) {
+      directArgs.push(`${schema.directTimestampArg}: $from`);
+    }
+    const whereClause = whereEntries.length
+      ? `where: { ${whereEntries.join(", ")} }`
+      : "";
+    const orderByClause = schema.orderByField
+      ? `orderBy: ${schema.orderByField}, orderDirection: asc`
+      : "";
+    const args = [
+      ...directArgs,
+      whereClause,
+      orderByClause,
+      `first: ${PAGE_SIZE}`,
+      `skip: $skip`,
+    ]
+      .filter(Boolean)
+      .join(", ");
+    const query = `
+      query UserTransactions($user: String!, $from: Int!, $skip: Int!) {
+        ${schema.queryField}(${args}) {
+          ${selection}
+        }
+      }
+    `;
+
+    let skip = 0;
+    while (true) {
+      const data = await postGraphQL<
+        Record<string, Array<Record<string, unknown>> | undefined>
+      >(url, query, {
+        user: address,
+        from: Math.max(0, Math.floor(fromTimestamp)),
+        skip,
+      });
+      const batch = data[schema.queryField] ?? [];
+      for (const raw of batch) {
+        const reserve =
+          schema.reserveField && raw[schema.reserveField]
+            ? ((raw[schema.reserveField] as Record<string, unknown>) ?? null)
+            : null;
+        const txHashField = schema.fields.txHash;
+        const txHash =
+          (txHashField ? (raw[txHashField] as string | undefined) : undefined) ??
+          ((raw.id as string | undefined) ?? "");
+        const normalized = normalizeEvent({
+          txHash,
+          logIndex: schema.fields.logIndex
+            ? (raw[schema.fields.logIndex] as number | string | undefined)
+            : undefined,
+          blockNumber: schema.fields.blockNumber
+            ? (raw[schema.fields.blockNumber] as number | string | undefined)
+            : undefined,
+          timestamp: schema.fields.timestamp
+            ? (raw[schema.fields.timestamp] as number | string | undefined)
+            : undefined,
+          eventType: schema.fields.action
+            ? (raw[schema.fields.action] as string | undefined)
+            : schema.fallbackEventType,
+          assetAddress: schema.reserveFields?.underlyingAsset
+            ? (reserve?.[schema.reserveFields.underlyingAsset] as string | undefined)
+            : undefined,
+          assetSymbol: schema.reserveFields?.symbol
+            ? (reserve?.[schema.reserveFields.symbol] as string | undefined)
+            : undefined,
+          assetDecimals: schema.reserveFields?.decimals
+            ? (reserve?.[schema.reserveFields.decimals] as number | string | undefined)
+            : undefined,
+          amountRaw: schema.fields.amount
+            ? (raw[schema.fields.amount] as string | undefined)
+            : undefined,
+        });
+        if (normalized) events.push(normalized);
+      }
+      if (batch.length < PAGE_SIZE) break;
+      skip += PAGE_SIZE;
+    }
   }
   return events;
 }
 
-async function getAaveSchemaConfig(url: string): Promise<AaveSchemaConfig> {
+async function getAaveSchemaConfig(url: string): Promise<AaveSchemaConfig[]> {
   if (!aaveSchemaCache.has(url)) {
     aaveSchemaCache.set(url, resolveAaveSchemaConfig(url));
   }
   return aaveSchemaCache.get(url)!;
 }
 
-async function resolveAaveSchemaConfig(url: string): Promise<AaveSchemaConfig> {
+async function resolveAaveSchemaConfig(url: string): Promise<AaveSchemaConfig[]> {
   const data = await postGraphQL<{
     __schema?: { queryType?: { fields?: QueryFieldInfo[] } };
   }>(
@@ -382,16 +384,22 @@ async function resolveAaveSchemaConfig(url: string): Promise<AaveSchemaConfig> {
     ? fields.find((field) => field.name === queryFieldName)
     : undefined;
 
-  const resolved = directMatch
-    ? await buildAaveConfigFromField(url, directMatch)
-    : null;
-  if (resolved) {
-    return resolved;
+  const configs: AaveSchemaConfig[] = [];
+  if (directMatch) {
+    const resolved = await buildAaveConfigFromField(url, directMatch);
+    if (resolved) configs.push(resolved);
   }
 
   for (const field of fields) {
+    if (configs.some((config) => config.queryField === field.name)) {
+      continue;
+    }
     const candidate = await buildAaveConfigFromField(url, field);
-    if (candidate) return candidate;
+    if (candidate) configs.push(candidate);
+  }
+
+  if (configs.length > 0) {
+    return configs;
   }
 
   throw new Error(
@@ -548,6 +556,7 @@ async function buildAaveConfigFromField(
     orderByField: timestampField,
     reserveField,
     reserveFields,
+    fallbackEventType: queryField.name,
   };
 }
 
