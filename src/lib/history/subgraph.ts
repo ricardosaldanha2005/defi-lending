@@ -66,6 +66,8 @@ type AaveSchemaConfig = {
   };
   whereUserField?: string;
   whereTimestampField?: string;
+  directUserArg?: string;
+  directTimestampArg?: string;
   orderByField?: string;
   reserveField?: string;
   reserveFields?: {
@@ -243,13 +245,26 @@ async function fetchAaveEvents(
   if (schema.whereTimestampField) {
     whereEntries.push(`${schema.whereTimestampField}: $from`);
   }
+  const directArgs: string[] = [];
+  if (schema.directUserArg) {
+    directArgs.push(`${schema.directUserArg}: $user`);
+  }
+  if (schema.directTimestampArg) {
+    directArgs.push(`${schema.directTimestampArg}: $from`);
+  }
   const whereClause = whereEntries.length
     ? `where: { ${whereEntries.join(", ")} }`
     : "";
   const orderByClause = schema.orderByField
     ? `orderBy: ${schema.orderByField}, orderDirection: asc`
     : "";
-  const args = [whereClause, orderByClause, `first: ${PAGE_SIZE}`, `skip: $skip`]
+  const args = [
+    ...directArgs,
+    whereClause,
+    orderByClause,
+    `first: ${PAGE_SIZE}`,
+    `skip: $skip`,
+  ]
     .filter(Boolean)
     .join(", ");
 
@@ -432,9 +447,14 @@ async function buildAaveConfigFromField(
   const logIndexField = pickField(eventFields, ["logIndex", "log_index"]);
   const blockNumberField = pickField(eventFields, ["blockNumber", "block_number"]);
   const actionField = pickField(eventFields, ["action", "eventType", "type"]);
-  const amountField = pickField(eventFields, ["amount", "amountUSD", "amountUsd"]);
+  const amountField = pickField(eventFields, [
+    "amount",
+    "amountUSD",
+    "amountUsd",
+    "value",
+  ]);
   const reserveField = pickField(eventFields, ["reserve", "asset", "token"]);
-  if (!timestampField || !amountField) {
+  if (!timestampField) {
     return null;
   }
 
@@ -471,6 +491,13 @@ async function buildAaveConfigFromField(
     }
   }
 
+  const directUserArg = queryField.args.find((arg) =>
+    ["user", "account"].includes(arg.name),
+  )?.name;
+  const directTimestampArg = queryField.args.find((arg) =>
+    ["from", "fromTimestamp", "timestamp_gte"].includes(arg.name),
+  )?.name;
+
   const whereArg = queryField.args.find((arg) => arg.name === "where");
   const whereTypeName = whereArg ? unwrapTypeName(whereArg.type) : null;
   let whereUserField: string | undefined;
@@ -498,6 +525,10 @@ async function buildAaveConfigFromField(
     ]);
   }
 
+  if (!whereUserField && !directUserArg) {
+    return null;
+  }
+
   return {
     queryField: queryField.name,
     eventTypeName,
@@ -512,6 +543,8 @@ async function buildAaveConfigFromField(
     },
     whereUserField,
     whereTimestampField,
+    directUserArg,
+    directTimestampArg,
     orderByField: timestampField,
     reserveField,
     reserveFields,
