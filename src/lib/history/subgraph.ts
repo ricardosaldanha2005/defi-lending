@@ -542,10 +542,6 @@ async function buildAaveConfigFromField(
     ]);
   }
 
-  if (!whereUserField && !directUserArg) {
-    return null;
-  }
-
   return {
     queryField: queryField.name,
     eventTypeName,
