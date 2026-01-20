@@ -20,6 +20,25 @@ type WalletRow = {
   protocol: Protocol | null;
 };
 
+type StrategyEventInsert = {
+  user_id: string;
+  wallet_id: string;
+  protocol: Protocol;
+  chain: string;
+  tx_hash: string;
+  log_index: number;
+  block_number: number;
+  block_timestamp: string;
+  event_type: string;
+  asset_address: string | null;
+  asset_symbol: string | null;
+  asset_decimals: number | null;
+  amount_raw: string | null;
+  amount: string | null;
+  price_usd: number | null;
+  amount_usd: number | null;
+};
+
 async function mapWithConcurrency<T, R>(
   items: T[],
   limit: number,
@@ -97,7 +116,7 @@ export async function POST(request: Request) {
       fromTimestamp: lastTimestamp,
     });
 
-    const inserts = events.map((event) => ({
+    const inserts: StrategyEventInsert[] = events.map((event) => ({
       user_id: wallet.user_id,
       wallet_id: wallet.id,
       protocol,
