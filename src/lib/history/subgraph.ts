@@ -460,6 +460,8 @@ async function buildAaveConfigFromField(
     "amountUSD",
     "amountUsd",
     "value",
+    "amountBeforeFee",
+    "amountAfterFee",
   ]);
   const reserveField = pickField(eventFields, ["reserve", "asset", "token"]);
   if (!timestampField) {
