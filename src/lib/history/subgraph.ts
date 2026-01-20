@@ -15,6 +15,7 @@ type NormalizedEvent = {
   assetDecimals: number | null;
   amountRaw: string | null;
   amount: string | null;
+  amountUsdRaw?: string | null;
 };
 
 type TypeRef = {
@@ -40,6 +41,7 @@ type CompoundSchemaConfig = {
     blockNumber?: string;
     eventType?: string;
     amount?: string;
+    amountUsd?: string;
   };
   whereAccountField?: string;
   whereTimestampField?: string;
@@ -63,6 +65,7 @@ type AaveSchemaConfig = {
     blockNumber?: string;
     action?: string;
     amount?: string;
+    amountUsd?: string;
   };
   whereUserField?: string;
   whereTimestampField?: string;
@@ -188,6 +191,7 @@ function normalizeEvent(params: {
   assetSymbol?: string | null;
   assetDecimals?: number | string | null;
   amountRaw?: string | null;
+  amountUsdRaw?: string | null;
 }): NormalizedEvent | null {
   const txHash = params.txHash ?? "";
   if (!txHash) return null;
@@ -201,6 +205,7 @@ function normalizeEvent(params: {
       : null;
   const amountRaw = params.amountRaw ?? null;
   const amount = normalizeAmount(amountRaw, assetDecimals);
+  const amountUsdRaw = params.amountUsdRaw ?? null;
 
   return {
     txHash,
@@ -213,6 +218,7 @@ function normalizeEvent(params: {
     assetDecimals: Number.isFinite(assetDecimals) ? assetDecimals : null,
     amountRaw,
     amount,
+    amountUsdRaw,
   };
 }
 
@@ -330,6 +336,9 @@ async function fetchAaveEvents(
           amountRaw: schema.fields.amount
             ? (raw[schema.fields.amount] as string | undefined)
             : undefined,
+          amountUsdRaw: schema.fields.amountUsd
+            ? (raw[schema.fields.amountUsd] as string | undefined)
+            : undefined,
         });
         if (normalized) events.push(normalized);
         if (limit && events.length >= limit) {
@@ -437,6 +446,7 @@ async function resolveAaveSchemaConfig(url: string): Promise<AaveSchemaConfig[]>
         id: "id",
         timestamp: "timestamp",
         amount: "amount",
+        amountUsd: "amountUSD",
       },
       orderByField: "timestamp",
       fallbackEventType: field.name,
@@ -495,6 +505,7 @@ async function buildAaveConfigFromField(
         blockNumber: "blockNumber",
         action: "eventType",
         amount: "amount",
+        amountUsd: "amountUSD",
       },
       orderByField: "timestamp",
       fallbackEventType: queryField.name,
@@ -515,11 +526,15 @@ async function buildAaveConfigFromField(
   const actionField = pickField(eventFields, ["action", "eventType", "type"]);
   const amountField = pickField(eventFields, [
     "amount",
-    "amountUSD",
-    "amountUsd",
     "value",
     "amountBeforeFee",
     "amountAfterFee",
+  ]);
+  const amountUsdField = pickField(eventFields, [
+    "amountUSD",
+    "amountUsd",
+    "amountInUSD",
+    "amount_usd",
   ]);
   const reserveField = pickField(eventFields, ["reserve", "asset", "token"]);
   if (!timestampField) {
@@ -613,6 +628,7 @@ async function buildAaveConfigFromField(
       blockNumber: blockNumberField,
       action: actionField,
       amount: amountField,
+      amountUsd: amountUsdField,
     },
     whereUserField,
     whereTimestampField,
@@ -632,6 +648,7 @@ function buildAaveSelection(schema: AaveSchemaConfig) {
   if (schema.fields.timestamp) fields.push(schema.fields.timestamp);
   if (schema.fields.action) fields.push(schema.fields.action);
   if (schema.fields.amount) fields.push(schema.fields.amount);
+  if (schema.fields.amountUsd) fields.push(schema.fields.amountUsd);
   if (schema.fields.logIndex) fields.push(schema.fields.logIndex);
   if (schema.fields.blockNumber) fields.push(schema.fields.blockNumber);
   if (schema.fields.txHash) fields.push(schema.fields.txHash);
@@ -731,6 +748,9 @@ async function fetchCompoundEvents(
         amountRaw: schema.fields.amount
           ? (raw[schema.fields.amount] as string | undefined)
           : undefined,
+        amountUsdRaw: schema.fields.amountUsd
+          ? (raw[schema.fields.amountUsd] as string | undefined)
+          : undefined,
       });
       if (normalized) events.push(normalized);
       if (limit && events.length >= limit) {
@@ -822,7 +842,13 @@ async function resolveCompoundSchemaConfig(
   const logIndexField = pickField(eventFields, ["logIndex", "log_index"]);
   const blockNumberField = pickField(eventFields, ["blockNumber", "block_number"]);
   const eventTypeField = pickField(eventFields, ["eventType", "type", "action"]);
-  const amountField = pickField(eventFields, ["amount", "amountUsd", "amountUSD"]);
+  const amountField = pickField(eventFields, ["amount", "amountBeforeFee", "amountAfterFee"]);
+  const amountUsdField = pickField(eventFields, [
+    "amountUsd",
+    "amountUSD",
+    "amount_usd",
+    "amountInUSD",
+  ]);
   const assetField = pickField(eventFields, ["asset", "token"]);
 
   let assetFields: CompoundSchemaConfig["assetFields"];
@@ -896,6 +922,7 @@ async function resolveCompoundSchemaConfig(
       blockNumber: blockNumberField,
       eventType: eventTypeField,
       amount: amountField,
+      amountUsd: amountUsdField,
     },
     whereAccountField,
     whereTimestampField,
@@ -911,6 +938,7 @@ function buildCompoundSelection(schema: CompoundSchemaConfig) {
   if (schema.fields.timestamp) fields.push(schema.fields.timestamp);
   if (schema.fields.eventType) fields.push(schema.fields.eventType);
   if (schema.fields.amount) fields.push(schema.fields.amount);
+  if (schema.fields.amountUsd) fields.push(schema.fields.amountUsd);
   if (schema.fields.logIndex) fields.push(schema.fields.logIndex);
   if (schema.fields.blockNumber) fields.push(schema.fields.blockNumber);
   if (schema.fields.txHash) fields.push(schema.fields.txHash);

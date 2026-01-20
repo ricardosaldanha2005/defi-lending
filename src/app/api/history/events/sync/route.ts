@@ -125,27 +125,43 @@ export async function POST(request: Request) {
       maxEvents,
     });
 
-    const inserts: StrategyEventInsert[] = events.map((event) => ({
-      user_id: wallet.user_id,
-      wallet_id: wallet.id,
-      protocol,
-      chain: wallet.chain,
-      tx_hash: event.txHash,
-      log_index: event.logIndex,
-      block_number: event.blockNumber,
-      block_timestamp: new Date(event.timestamp * 1000).toISOString(),
-      event_type: event.eventType,
-      asset_address: event.assetAddress,
-      asset_symbol: event.assetSymbol,
-      asset_decimals: event.assetDecimals,
-      amount_raw: event.amountRaw,
-      amount: event.amount,
-      price_usd: null,
-      amount_usd: null,
-    }));
+    const inserts: StrategyEventInsert[] = events.map((event) => {
+      const amountUsd = event.amountUsdRaw
+        ? Number(event.amountUsdRaw)
+        : null;
+      const amountNumeric = event.amount ? Number(event.amount) : NaN;
+      const priceUsd =
+        Number.isFinite(amountNumeric) &&
+        Number.isFinite(amountUsd ?? NaN) &&
+        amountNumeric > 0
+          ? amountUsd / amountNumeric
+          : null;
+
+      return {
+        user_id: wallet.user_id,
+        wallet_id: wallet.id,
+        protocol,
+        chain: wallet.chain,
+        tx_hash: event.txHash,
+        log_index: event.logIndex,
+        block_number: event.blockNumber,
+        block_timestamp: new Date(event.timestamp * 1000).toISOString(),
+        event_type: event.eventType,
+        asset_address: event.assetAddress,
+        asset_symbol: event.assetSymbol,
+        asset_decimals: event.assetDecimals,
+        amount_raw: event.amountRaw,
+        amount: event.amount,
+        price_usd: Number.isFinite(priceUsd ?? NaN) ? priceUsd : null,
+        amount_usd: Number.isFinite(amountUsd ?? NaN) ? amountUsd : null,
+      };
+    });
 
     if (includePrices) {
       const enriched = await mapWithConcurrency(inserts, 2, async (row) => {
+        if (row.amount_usd && Number.isFinite(row.amount_usd)) {
+          return row;
+        }
         if (!row.asset_address || !row.block_timestamp) {
           return row;
         }
