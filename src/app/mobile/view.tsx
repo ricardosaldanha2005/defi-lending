@@ -4,6 +4,7 @@ import { useMemo } from "react";
 import Link from "next/link";
 
 import { Badge } from "@/components/ui/badge";
+import { ViewModeToggle } from "@/components/view-mode-toggle";
 import { useProtocolAccountData } from "@/hooks/useProtocol";
 import { useWallets, type WalletRow } from "@/hooks/useWallets";
 import { riskState } from "@/lib/calculations";
@@ -123,12 +124,7 @@ export default function MobileView() {
             </p>
             <h1 className="text-2xl font-semibold">Estratégias</h1>
           </div>
-          <Link
-            href="/app"
-            className="text-xs font-medium text-primary underline-offset-4 hover:underline"
-          >
-            Dashboard
-          </Link>
+          <ViewModeToggle />
         </header>
 
         {loading ? (

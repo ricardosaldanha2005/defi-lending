@@ -28,11 +28,33 @@ export async function middleware(request: NextRequest) {
   const isAppRoute = request.nextUrl.pathname.startsWith("/app");
   const isMobileRoute = request.nextUrl.pathname.startsWith("/mobile");
   const isLoginRoute = request.nextUrl.pathname.startsWith("/login");
+  const viewMode = request.cookies.get("view_mode")?.value;
+  const userAgent = request.headers.get("user-agent") ?? "";
+  const isMobileUserAgent =
+    /Android|iPhone|iPad|iPod|IEMobile|Opera Mini/i.test(userAgent);
 
   if (!user && (isAppRoute || isMobileRoute)) {
     const redirectUrl = request.nextUrl.clone();
     redirectUrl.pathname = "/login";
     return NextResponse.redirect(redirectUrl);
+  }
+
+  if (user) {
+    if (viewMode === "simple" && isAppRoute) {
+      const redirectUrl = request.nextUrl.clone();
+      redirectUrl.pathname = "/mobile";
+      return NextResponse.redirect(redirectUrl);
+    }
+    if (viewMode === "pro" && isMobileRoute) {
+      const redirectUrl = request.nextUrl.clone();
+      redirectUrl.pathname = "/app";
+      return NextResponse.redirect(redirectUrl);
+    }
+    if (!viewMode && isMobileUserAgent && isAppRoute) {
+      const redirectUrl = request.nextUrl.clone();
+      redirectUrl.pathname = "/mobile";
+      return NextResponse.redirect(redirectUrl);
+    }
   }
 
   if (user && isLoginRoute) {

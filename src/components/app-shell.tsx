@@ -2,6 +2,7 @@ import Link from "next/link";
 
 import { SignOutButton } from "@/components/sign-out-button";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { ViewModeToggle } from "@/components/view-mode-toggle";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   return (
@@ -27,6 +28,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             >
               Settings
             </Link>
+            <ViewModeToggle />
             <ThemeToggle />
             <SignOutButton />
           </nav>
