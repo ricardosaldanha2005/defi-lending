@@ -156,6 +156,28 @@ AAVE_SUBGRAPH_POLYGON=https://gateway.thegraph.com/api/<API_KEY>/subgraphs/id/6y
 AAVE_SUBGRAPH_ARBITRUM=https://gateway.thegraph.com/api/<API_KEY>/subgraphs/id/4xyasjQeREe7PxnF6wVdobZvCw5mhoHZq3T7guRpuNPf
 COMPOUND_SUBGRAPH_ARBITRUM=https://gateway.thegraph.com/api/<API_KEY>/subgraphs/id/5MjRndNWGhqvNX7chUYLQDnvEgc8DaH8eisEkcJt71SR
 COMPOUND_SUBGRAPH_BASE=https://gateway.thegraph.com/api/<API_KEY>/subgraphs/id/2hcXhs36pTBDVUmk5K2Zkr6N4UYGwaHuco2a6jyTsijo
+COINGECKO_API_KEY=
+```
+
+## Histórico e P&L (eventos on-chain)
+
+### Sync de eventos
+
+```
+POST /api/history/events/sync
+Body: { "walletId": "...", "includePrices": true }
+```
+
+### Ler eventos
+
+```
+GET /api/history/events?walletId=...&limit=200
+```
+
+### P&L básico (fluxos)
+
+```
+GET /api/history/pnl?walletId=...
 ```
 
 Nota: esta workspace bloqueia a criação automática de ficheiros `.env`, por isso

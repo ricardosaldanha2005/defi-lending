@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { isAddress } from "viem";
 
 import { fetchSubgraphEvents } from "@/lib/history/subgraph";
+import { fetchHistoricalTokenPriceUsd } from "@/lib/history/prices";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { Protocol } from "@/lib/protocols";
 
@@ -19,6 +20,22 @@ type WalletRow = {
   protocol: Protocol | null;
 };
 
+async function mapWithConcurrency<T, R>(
+  items: T[],
+  limit: number,
+  mapper: (item: T, index: number) => Promise<R>,
+) {
+  const results: R[] = [];
+  for (let i = 0; i < items.length; i += limit) {
+    const batch = items.slice(i, i + limit);
+    const batchResults = await Promise.all(
+      batch.map((item, idx) => mapper(item, i + idx)),
+    );
+    results.push(...batchResults);
+  }
+  return results;
+}
+
 function toTimestamp(value: number | null | undefined) {
   return Number.isFinite(value ?? NaN) ? Number(value) : 0;
 }
@@ -35,6 +52,7 @@ export async function POST(request: Request) {
 
   const body = await request.json().catch(() => ({}));
   const walletId = body?.walletId as string | undefined;
+  const includePrices = Boolean(body?.includePrices);
   if (!walletId) {
     return NextResponse.json({ error: "walletId required" }, { status: 400 });
   }
@@ -97,6 +115,36 @@ export async function POST(request: Request) {
       price_usd: null,
       amount_usd: null,
     }));
+
+    if (includePrices) {
+      const enriched = await mapWithConcurrency(inserts, 2, async (row) => {
+        if (!row.asset_address || !row.block_timestamp) {
+          return row;
+        }
+        const timestampSec = Math.floor(
+          new Date(row.block_timestamp).getTime() / 1000,
+        );
+        const priceUsd = await fetchHistoricalTokenPriceUsd({
+          chain: wallet.chain,
+          tokenAddress: row.asset_address,
+          timestampSec,
+        }).catch(() => null);
+        if (!priceUsd || !Number.isFinite(priceUsd)) {
+          return row;
+        }
+        const amountNumeric = row.amount ? Number(row.amount) : NaN;
+        const amountUsd =
+          Number.isFinite(amountNumeric) && Number.isFinite(priceUsd)
+            ? amountNumeric * priceUsd
+            : null;
+        return {
+          ...row,
+          price_usd: priceUsd,
+          amount_usd: amountUsd,
+        };
+      });
+      inserts.splice(0, inserts.length, ...enriched);
+    }
 
     if (inserts.length > 0) {
       const batchSize = 500;
