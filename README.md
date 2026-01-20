@@ -58,6 +58,38 @@ create table strategy_snapshots (
   liquidation_threshold_bps numeric not null,
   captured_at timestamptz not null default now()
 );
+
+create table strategy_events (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id),
+  wallet_id uuid not null references user_wallets(id),
+  protocol text not null,
+  chain text not null,
+  tx_hash text not null,
+  log_index integer not null,
+  block_number bigint not null,
+  block_timestamp timestamptz not null,
+  event_type text not null,
+  asset_address text,
+  asset_symbol text,
+  asset_decimals integer,
+  amount_raw text,
+  amount numeric,
+  price_usd numeric,
+  amount_usd numeric,
+  created_at timestamptz not null default now(),
+  unique (wallet_id, tx_hash, log_index)
+);
+
+create table strategy_event_sync (
+  wallet_id uuid primary key references user_wallets(id) on delete cascade,
+  user_id uuid not null references auth.users(id),
+  protocol text not null,
+  chain text not null,
+  last_synced_timestamp bigint not null default 0,
+  last_synced_block bigint not null default 0,
+  updated_at timestamptz not null default now()
+);
 ```
 
 ### RLS
@@ -66,6 +98,9 @@ create table strategy_snapshots (
 alter table user_wallets enable row level security;
 alter table wallet_hf_targets enable row level security;
 alter table wallet_strategy_notes enable row level security;
+alter table strategy_snapshots enable row level security;
+alter table strategy_events enable row level security;
+alter table strategy_event_sync enable row level security;
 
 create policy "users can manage their wallets" on user_wallets
 for all using (user_id = auth.uid())
@@ -80,6 +115,14 @@ for all using (user_id = auth.uid())
 with check (user_id = auth.uid());
 
 create policy "manage strategy snapshots" on strategy_snapshots
+for all using (user_id = auth.uid())
+with check (user_id = auth.uid());
+
+create policy "manage strategy events" on strategy_events
+for all using (user_id = auth.uid())
+with check (user_id = auth.uid());
+
+create policy "manage strategy event sync" on strategy_event_sync
 for all using (user_id = auth.uid())
 with check (user_id = auth.uid());
 ```
@@ -109,6 +152,10 @@ COMPOUND_COMET_ARBITRUM=
 BASE_RPC_URL=https://mainnet.base.org
 COMPOUND_COMET_BASE=
 N8N_WEBHOOK_URL=https://ricardon8n.duckdns.org/webhook-test/defi-lending
+AAVE_SUBGRAPH_POLYGON=https://gateway.thegraph.com/api/<API_KEY>/subgraphs/id/6yuf1C49aWEscgk5n9D1DekeG1BCk5Z9imJYJT3sVmAT
+AAVE_SUBGRAPH_ARBITRUM=https://gateway.thegraph.com/api/<API_KEY>/subgraphs/id/4xyasjQeREe7PxnF6wVdobZvCw5mhoHZq3T7guRpuNPf
+COMPOUND_SUBGRAPH_ARBITRUM=https://gateway.thegraph.com/api/<API_KEY>/subgraphs/id/5MjRndNWGhqvNX7chUYLQDnvEgc8DaH8eisEkcJt71SR
+COMPOUND_SUBGRAPH_BASE=https://gateway.thegraph.com/api/<API_KEY>/subgraphs/id/2hcXhs36pTBDVUmk5K2Zkr6N4UYGwaHuco2a6jyTsijo
 ```
 
 Nota: esta workspace bloqueia a criação automática de ficheiros `.env`, por isso
