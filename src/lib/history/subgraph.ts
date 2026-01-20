@@ -52,6 +52,29 @@ type CompoundSchemaConfig = {
   };
 };
 
+type AaveSchemaConfig = {
+  queryField: string;
+  eventTypeName: string;
+  fields: {
+    id?: string;
+    timestamp?: string;
+    txHash?: string;
+    logIndex?: string;
+    blockNumber?: string;
+    action?: string;
+    amount?: string;
+  };
+  whereUserField?: string;
+  whereTimestampField?: string;
+  orderByField?: string;
+  reserveField?: string;
+  reserveFields?: {
+    symbol?: string;
+    underlyingAsset?: string;
+    decimals?: string;
+  };
+};
+
 type FetchParams = {
   protocol: Protocol;
   chain: string;
@@ -71,6 +94,7 @@ const COMPOUND_SUBGRAPHS: Record<string, string | undefined> = {
 
 const PAGE_SIZE = 1000;
 const compoundSchemaCache = new Map<string, Promise<CompoundSchemaConfig>>();
+const aaveSchemaCache = new Map<string, Promise<AaveSchemaConfig>>();
 
 function getSubgraphUrl(protocol: Protocol, chain: string) {
   if (protocol === "compound") {
@@ -206,27 +230,29 @@ async function fetchAaveEvents(
   address: string,
   fromTimestamp: number,
 ) {
+  const schema = await getAaveSchemaConfig(url);
+  const selection = buildAaveSelection(schema);
+  const whereEntries: string[] = [];
+  if (schema.whereUserField) {
+    whereEntries.push(`${schema.whereUserField}: $user`);
+  }
+  if (schema.whereTimestampField) {
+    whereEntries.push(`${schema.whereTimestampField}: $from`);
+  }
+  const whereClause = whereEntries.length
+    ? `where: { ${whereEntries.join(", ")} }`
+    : "";
+  const orderByClause = schema.orderByField
+    ? `orderBy: ${schema.orderByField}, orderDirection: asc`
+    : "";
+  const args = [whereClause, orderByClause, `first: ${PAGE_SIZE}`, `skip: $skip`]
+    .filter(Boolean)
+    .join(", ");
+
   const query = `
     query UserTransactions($user: String!, $from: Int!, $skip: Int!) {
-      userTransactions(
-        where: { user: $user, timestamp_gte: $from }
-        orderBy: timestamp
-        orderDirection: asc
-        first: ${PAGE_SIZE}
-        skip: $skip
-      ) {
-        id
-        timestamp
-        action
-        amount
-        txHash
-        logIndex
-        blockNumber
-        reserve {
-          symbol
-          underlyingAsset
-          decimals
-        }
+      ${schema.queryField}(${args}) {
+        ${selection}
       }
     }
   `;
@@ -234,26 +260,49 @@ async function fetchAaveEvents(
   const events: NormalizedEvent[] = [];
   let skip = 0;
   while (true) {
-    const data = await postGraphQL<{
-      userTransactions?: Array<Record<string, unknown>>;
-    }>(url, query, {
+    const data = await postGraphQL<
+      Record<string, Array<Record<string, unknown>> | undefined>
+    >(url, query, {
       user: address,
       from: Math.max(0, Math.floor(fromTimestamp)),
       skip,
     });
-    const batch = data.userTransactions ?? [];
+    const batch = data[schema.queryField] ?? [];
     for (const raw of batch) {
-      const reserve = (raw.reserve as Record<string, unknown>) ?? null;
+      const reserve =
+        schema.reserveField && raw[schema.reserveField]
+          ? ((raw[schema.reserveField] as Record<string, unknown>) ?? null)
+          : null;
+      const txHashField = schema.fields.txHash;
+      const txHash =
+        (txHashField ? (raw[txHashField] as string | undefined) : undefined) ??
+        ((raw.id as string | undefined) ?? "");
       const normalized = normalizeEvent({
-        txHash: (raw.txHash as string) ?? (raw.transactionHash as string),
-        logIndex: raw.logIndex as number | string | undefined,
-        blockNumber: raw.blockNumber as number | string | undefined,
-        timestamp: raw.timestamp as number | string | undefined,
-        eventType: raw.action as string | undefined,
-        assetAddress: reserve?.underlyingAsset as string | undefined,
-        assetSymbol: reserve?.symbol as string | undefined,
-        assetDecimals: reserve?.decimals as number | string | undefined,
-        amountRaw: raw.amount as string | undefined,
+        txHash,
+        logIndex: schema.fields.logIndex
+          ? (raw[schema.fields.logIndex] as number | string | undefined)
+          : undefined,
+        blockNumber: schema.fields.blockNumber
+          ? (raw[schema.fields.blockNumber] as number | string | undefined)
+          : undefined,
+        timestamp: schema.fields.timestamp
+          ? (raw[schema.fields.timestamp] as number | string | undefined)
+          : undefined,
+        eventType: schema.fields.action
+          ? (raw[schema.fields.action] as string | undefined)
+          : undefined,
+        assetAddress: schema.reserveFields?.underlyingAsset
+          ? (reserve?.[schema.reserveFields.underlyingAsset] as string | undefined)
+          : undefined,
+        assetSymbol: schema.reserveFields?.symbol
+          ? (reserve?.[schema.reserveFields.symbol] as string | undefined)
+          : undefined,
+        assetDecimals: schema.reserveFields?.decimals
+          ? (reserve?.[schema.reserveFields.decimals] as number | string | undefined)
+          : undefined,
+        amountRaw: schema.fields.amount
+          ? (raw[schema.fields.amount] as string | undefined)
+          : undefined,
       });
       if (normalized) events.push(normalized);
     }
@@ -261,6 +310,191 @@ async function fetchAaveEvents(
     skip += PAGE_SIZE;
   }
   return events;
+}
+
+async function getAaveSchemaConfig(url: string): Promise<AaveSchemaConfig> {
+  if (!aaveSchemaCache.has(url)) {
+    aaveSchemaCache.set(url, resolveAaveSchemaConfig(url));
+  }
+  return aaveSchemaCache.get(url)!;
+}
+
+async function resolveAaveSchemaConfig(url: string): Promise<AaveSchemaConfig> {
+  const data = await postGraphQL<{
+    __schema?: { queryType?: { fields?: QueryFieldInfo[] } };
+  }>(
+    url,
+    `
+      query SchemaInfo {
+        __schema {
+          queryType {
+            fields {
+              name
+              type { kind name ofType { kind name ofType { kind name } } }
+              args {
+                name
+                type { kind name ofType { kind name ofType { kind name } } }
+              }
+            }
+          }
+        }
+      }
+    `,
+    {},
+  );
+
+  const fields = data.__schema?.queryType?.fields ?? [];
+  const queryFieldName =
+    pickField(fields, ["userTransactions", "transactions", "userTransaction"]) ??
+    fields.find((field) => field.name.toLowerCase().includes("transaction"))
+      ?.name ??
+    "userTransactions";
+  const queryField = fields.find((field) => field.name === queryFieldName);
+  if (!queryField) {
+    throw new Error("Aave subgraph has no transaction query field.");
+  }
+
+  const eventTypeName = unwrapTypeName(queryField.type);
+  if (!eventTypeName) {
+    throw new Error("Aave transaction type not found.");
+  }
+
+  const eventTypeInfo = await postGraphQL<{
+    __type?: { fields?: Array<{ name: string; type: TypeRef }> };
+  }>(
+    url,
+    `
+      query EventType($name: String!) {
+        __type(name: $name) {
+          fields {
+            name
+            type { kind name ofType { kind name ofType { kind name } } }
+          }
+        }
+      }
+    `,
+    { name: eventTypeName },
+  );
+
+  const eventFields = eventTypeInfo.__type?.fields ?? [];
+  const timestampField = pickField(eventFields, [
+    "timestamp",
+    "blockTimestamp",
+    "block_timestamp",
+  ]);
+  const txHashField = pickField(eventFields, [
+    "txHash",
+    "transactionHash",
+    "hash",
+  ]);
+  const logIndexField = pickField(eventFields, ["logIndex", "log_index"]);
+  const blockNumberField = pickField(eventFields, ["blockNumber", "block_number"]);
+  const actionField = pickField(eventFields, ["action", "eventType", "type"]);
+  const amountField = pickField(eventFields, ["amount", "amountUSD", "amountUsd"]);
+  const reserveField = pickField(eventFields, ["reserve", "asset", "token"]);
+
+  let reserveFields: AaveSchemaConfig["reserveFields"];
+  if (reserveField) {
+    const reserveTypeName = unwrapTypeName(
+      eventFields.find((field) => field.name === reserveField)?.type,
+    );
+    if (reserveTypeName) {
+      const reserveTypeInfo = await postGraphQL<{
+        __type?: { fields?: Array<{ name: string }> };
+      }>(
+        url,
+        `
+          query ReserveType($name: String!) {
+            __type(name: $name) {
+              fields { name }
+            }
+          }
+        `,
+        { name: reserveTypeName },
+      );
+      const reserveTypeFields = reserveTypeInfo.__type?.fields ?? [];
+      reserveFields = {
+        symbol: pickField(reserveTypeFields, ["symbol", "name"]),
+        underlyingAsset: pickField(reserveTypeFields, [
+          "underlyingAsset",
+          "underlyingAssetAddress",
+          "tokenAddress",
+          "id",
+        ]),
+        decimals: pickField(reserveTypeFields, ["decimals"]),
+      };
+    }
+  }
+
+  const whereArg = queryField.args.find((arg) => arg.name === "where");
+  const whereTypeName = whereArg ? unwrapTypeName(whereArg.type) : null;
+  let whereUserField: string | undefined;
+  let whereTimestampField: string | undefined;
+  if (whereTypeName) {
+    const whereTypeInfo = await postGraphQL<{
+      __type?: { inputFields?: Array<{ name: string }> };
+    }>(
+      url,
+      `
+        query WhereType($name: String!) {
+          __type(name: $name) {
+            inputFields { name }
+          }
+        }
+      `,
+      { name: whereTypeName },
+    );
+    const whereFields = whereTypeInfo.__type?.inputFields ?? [];
+    whereUserField = pickField(whereFields, ["user", "account", "user_"]);
+    whereTimestampField = pickField(whereFields, [
+      "timestamp_gte",
+      "blockTimestamp_gte",
+      "timestamp_gt",
+    ]);
+  }
+
+  return {
+    queryField: queryField.name,
+    eventTypeName,
+    fields: {
+      id: pickField(eventFields, ["id"]),
+      timestamp: timestampField,
+      txHash: txHashField,
+      logIndex: logIndexField,
+      blockNumber: blockNumberField,
+      action: actionField,
+      amount: amountField,
+    },
+    whereUserField,
+    whereTimestampField,
+    orderByField: timestampField,
+    reserveField,
+    reserveFields,
+  };
+}
+
+function buildAaveSelection(schema: AaveSchemaConfig) {
+  const fields: string[] = [];
+  if (schema.fields.id) fields.push(schema.fields.id);
+  if (schema.fields.timestamp) fields.push(schema.fields.timestamp);
+  if (schema.fields.action) fields.push(schema.fields.action);
+  if (schema.fields.amount) fields.push(schema.fields.amount);
+  if (schema.fields.logIndex) fields.push(schema.fields.logIndex);
+  if (schema.fields.blockNumber) fields.push(schema.fields.blockNumber);
+  if (schema.fields.txHash) fields.push(schema.fields.txHash);
+  if (schema.reserveField) {
+    const reserveFields = [
+      schema.reserveFields?.symbol,
+      schema.reserveFields?.underlyingAsset,
+      schema.reserveFields?.decimals,
+    ].filter(Boolean);
+    if (reserveFields.length > 0) {
+      fields.push(
+        `${schema.reserveField} { ${reserveFields.join(" ")} }`,
+      );
+    }
+  }
+  return fields.join("\n");
 }
 
 async function fetchCompoundEvents(
