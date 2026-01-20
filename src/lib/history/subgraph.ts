@@ -525,7 +525,16 @@ async function buildAaveConfigFromField(
       { name: whereTypeName },
     );
     const whereFields = whereTypeInfo.__type?.inputFields ?? [];
-    whereUserField = pickField(whereFields, ["user", "account", "user_"]);
+    whereUserField = pickField(whereFields, [
+      "user",
+      "account",
+      "from",
+      "to",
+      "user_",
+      "account_",
+      "from_",
+      "to_",
+    ]);
     whereTimestampField = pickField(whereFields, [
       "timestamp_gte",
       "blockTimestamp_gte",
