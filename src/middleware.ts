@@ -26,9 +26,10 @@ export async function middleware(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   const isAppRoute = request.nextUrl.pathname.startsWith("/app");
+  const isMobileRoute = request.nextUrl.pathname.startsWith("/mobile");
   const isLoginRoute = request.nextUrl.pathname.startsWith("/login");
 
-  if (!user && isAppRoute) {
+  if (!user && (isAppRoute || isMobileRoute)) {
     const redirectUrl = request.nextUrl.clone();
     redirectUrl.pathname = "/login";
     return NextResponse.redirect(redirectUrl);
@@ -44,5 +45,5 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/app/:path*", "/login"],
+  matcher: ["/app/:path*", "/mobile", "/login"],
 };
