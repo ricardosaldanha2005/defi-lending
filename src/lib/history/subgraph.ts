@@ -68,6 +68,7 @@ type AaveSchemaConfig = {
   whereTimestampField?: string;
   directUserArg?: string;
   directTimestampArg?: string;
+  requiresWhere?: boolean;
   orderByField?: string;
   reserveField?: string;
   reserveFields?: {
@@ -257,7 +258,9 @@ async function fetchAaveEvents(
     }
     const whereClause = whereEntries.length
       ? `where: { ${whereEntries.join(", ")} }`
-      : "";
+      : schema.requiresWhere
+        ? "where: {}"
+        : "";
     const orderByClause = schema.orderByField
       ? `orderBy: ${schema.orderByField}, orderDirection: asc`
       : "";
@@ -416,7 +419,7 @@ async function buildAaveConfigFromField(
   const requiredArgs = queryField.args
     .filter((arg) => isRequiredArg(arg.type))
     .map((arg) => arg.name);
-  const supportedRequired = new Set(["user", "account", "from", "skip"]);
+  const supportedRequired = new Set(["user", "account", "from", "skip", "where"]);
   if (requiredArgs.some((arg) => !supportedRequired.has(arg))) {
     return null;
   }
@@ -577,6 +580,7 @@ async function buildAaveConfigFromField(
     whereTimestampField,
     directUserArg,
     directTimestampArg,
+    requiresWhere: requiredArgs.includes("where"),
     orderByField: timestampField,
     reserveField,
     reserveFields,
