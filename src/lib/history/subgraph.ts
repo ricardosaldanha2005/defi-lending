@@ -442,6 +442,23 @@ async function buildAaveConfigFromField(
   );
 
   const eventFields = eventTypeInfo.__type?.fields ?? [];
+  if (eventFields.length === 0) {
+    return {
+      queryField: queryField.name,
+      eventTypeName,
+      fields: {
+        id: "id",
+        timestamp: "timestamp",
+        txHash: "transactionHash",
+        logIndex: "logIndex",
+        blockNumber: "blockNumber",
+        action: "eventType",
+        amount: "amount",
+      },
+      orderByField: "timestamp",
+      fallbackEventType: queryField.name,
+    };
+  }
   const timestampField = pickField(eventFields, [
     "timestamp",
     "blockTimestamp",
