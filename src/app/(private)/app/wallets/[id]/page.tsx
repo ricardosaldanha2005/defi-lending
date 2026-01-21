@@ -249,6 +249,12 @@ function PnlCard({
               {formatUsd(finalDebtPnl.currentValueUsd)}
             </p>
           </div>
+          {/* Debug: mostrar valores brutos */}
+          {process.env.NODE_ENV === "development" && (
+            <div className="text-xs text-muted-foreground">
+              Debug: currentDebtUsd={currentDebtUsd?.toFixed(2)}, currentDebtValue={currentDebtValue.toFixed(2)}, borrowedUsd={finalDebtPnl.borrowedUsd.toFixed(2)}
+            </div>
+          )}
           {finalDebtPnl.pnl !== 0 && (
             <>
               <Separator />
