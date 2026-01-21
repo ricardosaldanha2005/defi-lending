@@ -366,7 +366,14 @@ export async function GET(request: Request) {
   // "Quanto emprestaste" = Total líquido emprestado (borrows - repays) em USD histórico
   // Este valor não muda - é a soma histórica dos borrows menos os repays
   const totalBorrowedUsd = totals.borrowUsd - totals.repayUsd;
-  const debtPnl = currentDebtValue - totalBorrowedUsd;
+  
+  // Se não temos eventos históricos mas temos dívida atual, usar o custo médio ponderado como fallback
+  // Isso acontece quando os eventos não estão sincronizados ou não têm amount_usd
+  const borrowedUsd = totalBorrowedUsd > 0 
+    ? totalBorrowedUsd 
+    : (historicalDebtCost > 0 ? historicalDebtCost : 0);
+  
+  const debtPnl = currentDebtValue - borrowedUsd;
 
   return NextResponse.json({
     walletId,
@@ -374,7 +381,7 @@ export async function GET(request: Request) {
     netCollateralFlow,
     netDebtFlow,
     debtPnl: {
-      borrowedUsd: totalBorrowedUsd, // Quanto emprestaste (total líquido em USD histórico)
+      borrowedUsd: borrowedUsd, // Quanto emprestaste (total líquido em USD histórico, ou custo médio ponderado como fallback)
       currentValueUsd: currentDebtValue, // Quanto vale agora
       pnl: debtPnl, // P&L = Valor atual - Custo histórico
     },
