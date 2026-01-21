@@ -314,9 +314,13 @@ async function fetchAaveEvents(
       });
       const batch = data[schema.queryField] ?? [];
       for (const raw of batch) {
-      const reserve =
+      const reserveValue =
         schema.reserveField && raw[schema.reserveField]
-          ? ((raw[schema.reserveField] as Record<string, unknown>) ?? null)
+          ? raw[schema.reserveField]
+          : null;
+      const reserve =
+        reserveValue && typeof reserveValue === "object"
+          ? ((reserveValue as Record<string, unknown>) ?? null)
           : null;
       let nestedReserve: Record<string, unknown> | null = null;
       if (reserve && schema.reserveNestedField && reserve[schema.reserveNestedField]) {
@@ -328,6 +332,8 @@ async function fetchAaveEvents(
           nestedReserve = (nestedValue as Record<string, unknown>) ?? null;
         }
       }
+      const reserveAsString =
+        typeof reserveValue === "string" ? reserveValue : null;
         const txHashField = schema.fields.txHash;
         const txHash =
           (txHashField ? (raw[txHashField] as string | undefined) : undefined) ??
@@ -351,8 +357,10 @@ async function fetchAaveEvents(
               schema.reserveNestedFields.underlyingAsset
             ] as string | undefined)
           : schema.reserveFields?.underlyingAsset
-            ? (reserve?.[schema.reserveFields.underlyingAsset] as string | undefined)
-            : undefined,
+            ? (reserve?.[schema.reserveFields.underlyingAsset] as
+                | string
+                | undefined)
+            : reserveAsString ?? undefined,
         assetSymbol: schema.reserveNestedFields?.symbol
           ? (nestedReserve?.[
               schema.reserveNestedFields.symbol

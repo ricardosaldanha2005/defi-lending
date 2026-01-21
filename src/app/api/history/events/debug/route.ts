@@ -179,7 +179,10 @@ export async function GET(request: Request) {
       })),
       eventQueryField: targetField.name,
       eventTypeName,
-      eventFields: eventFields.map((field) => field.name),
+      eventFields: eventFields.map((field) => ({
+        name: field.name,
+        type: unwrapTypeName(field.type),
+      })),
       nestedCandidates,
     });
   } catch (error) {
