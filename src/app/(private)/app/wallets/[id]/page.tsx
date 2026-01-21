@@ -873,7 +873,7 @@ export default function WalletDetailPage() {
         <TabsContent value="resumo" className="space-y-4">
           <PnlCard
             walletId={walletId}
-            currentDebtUsd={totals?.debtUsd}
+            currentDebtUsd={accountData?.totalDebtUsd ?? totals?.debtUsd}
           />
           <Card>
             <CardHeader>
