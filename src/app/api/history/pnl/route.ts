@@ -208,14 +208,15 @@ export async function GET(request: Request) {
   const to = searchParams.get("to");
 
   // Fetch events with asset details for mark-to-market calculation
+  // IMPORTANTE: Não filtrar por amount_usd null, porque precisamos de contar todos os eventos
+  // Mesmo sem amount_usd, podemos calcular usando amount * price_usd se disponível
   let query = supabase
     .from("strategy_events")
     .select(
       "event_type,amount_usd,asset_address,asset_symbol,amount,price_usd",
     )
     .eq("user_id", user.id)
-    .eq("wallet_id", walletId)
-    .not("amount_usd", "is", null);
+    .eq("wallet_id", walletId);
 
   if (from) {
     query = query.gte("block_timestamp", from);
@@ -250,8 +251,16 @@ export async function GET(request: Request) {
   const assetCostBasis = new Map<string, AssetCostBasis>();
 
   (data as PnlRow[] | null | undefined)?.forEach((row) => {
-    const amountUsd = Number(row.amount_usd ?? 0);
-    if (!Number.isFinite(amountUsd)) return;
+    // Calcular amount_usd se não estiver disponível, usando amount * price_usd
+    let amountUsd = Number(row.amount_usd ?? 0);
+    if (!Number.isFinite(amountUsd) || amountUsd === 0) {
+      const amount = Number(row.amount ?? 0);
+      const priceUsd = Number(row.price_usd ?? 0);
+      if (Number.isFinite(amount) && Number.isFinite(priceUsd) && priceUsd > 0) {
+        amountUsd = amount * priceUsd;
+      }
+    }
+    if (!Number.isFinite(amountUsd) || amountUsd === 0) return;
     const kind = classifyEvent(row.event_type ?? "");
 
     // Update totals
