@@ -198,9 +198,10 @@ function PnlCard({
   const { debtPnl, netDebtFlow } = data;
 
   // Usar dívida atual como prioridade, depois debtPnl, depois netDebtFlow
+  // Se currentDebtUsd está definido e > 0, usar sempre esse valor
   const currentDebtValue =
-    (currentDebtUsd ?? 0) > 0
-      ? currentDebtUsd!
+    currentDebtUsd && currentDebtUsd > 0
+      ? currentDebtUsd
       : debtPnl?.currentValueUsd ?? netDebtFlow ?? 0;
 
   // Se não temos dívida, mostrar mensagem
