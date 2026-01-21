@@ -28,6 +28,12 @@ function unwrapTypeName(typeRef: TypeRef | null | undefined): string | null {
   return null;
 }
 
+function deriveEntityTypeName(value: string) {
+  if (!value) return null;
+  const base = value.endsWith("s") ? value.slice(0, -1) : value;
+  return base ? base.charAt(0).toUpperCase() + base.slice(1) : null;
+}
+
 async function postGraphQL<T>(
   url: string,
   query: string,
@@ -140,7 +146,8 @@ export async function GET(request: Request) {
       });
     }
 
-    const eventTypeName = unwrapTypeName(targetField.type);
+    const eventTypeName =
+      unwrapTypeName(targetField.type) ?? deriveEntityTypeName(targetField.name);
     const eventType = eventTypeName
       ? await postGraphQL<{
           __type?: { fields?: Array<{ name: string; type: TypeRef }> };

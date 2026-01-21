@@ -157,6 +157,12 @@ function unwrapTypeName(typeRef: TypeRef | null | undefined): string | null {
   return null;
 }
 
+function deriveEntityTypeName(value: string) {
+  if (!value) return null;
+  const base = value.endsWith("s") ? value.slice(0, -1) : value;
+  return base ? base.charAt(0).toUpperCase() + base.slice(1) : null;
+}
+
 function isRequiredArg(typeRef: TypeRef | null | undefined) {
   return typeRef?.kind === "NON_NULL";
 }
@@ -500,7 +506,8 @@ async function buildAaveConfigFromField(
     return null;
   }
 
-  const eventTypeName = unwrapTypeName(queryField.type);
+  const eventTypeName =
+    unwrapTypeName(queryField.type) ?? deriveEntityTypeName(queryField.name);
   if (!eventTypeName) return null;
 
   const eventTypeInfo = await postGraphQL<{
