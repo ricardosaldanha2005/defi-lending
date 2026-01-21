@@ -158,11 +158,11 @@ export async function GET(request: Request) {
               event.timestamp
             ) {
               try {
-                const historicalPrice = await fetchHistoricalTokenPriceUsd(
-                  event.assetAddress,
-                  event.assetSymbol,
-                  event.timestamp,
-                );
+                const historicalPrice = await fetchHistoricalTokenPriceUsd({
+                  chain: wallet.chain,
+                  tokenAddress: event.assetAddress,
+                  timestampSec: event.timestamp,
+                });
                 if (historicalPrice) {
                   priceUsd = historicalPrice;
                   if (event.amount) {
