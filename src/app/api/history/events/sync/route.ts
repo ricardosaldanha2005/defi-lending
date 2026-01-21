@@ -78,6 +78,8 @@ export async function POST(request: Request) {
   const maxEvents = Number.isFinite(maxEventsRaw)
     ? Math.max(100, Math.min(10000, maxEventsRaw))
     : 2000;
+  const overrideFromTimestamp = Number(body?.fromTimestamp);
+  const forceFromTimestamp = Boolean(body?.forceFromTimestamp);
   if (!walletId) {
     return NextResponse.json({ error: "walletId required" }, { status: 400 });
   }
@@ -114,7 +116,11 @@ export async function POST(request: Request) {
     (syncState as SyncRow | null)?.last_synced_timestamp ?? null,
   );
   const minTimestamp = Math.floor(Date.now() / 1000) - maxDays * 24 * 60 * 60;
-  const fromTimestamp = Math.max(lastTimestamp, minTimestamp);
+  const fromTimestamp = Number.isFinite(overrideFromTimestamp)
+    ? Math.max(0, Math.floor(overrideFromTimestamp))
+    : forceFromTimestamp
+      ? minTimestamp
+      : Math.max(lastTimestamp, minTimestamp);
 
   try {
     const events = await fetchSubgraphEvents({
