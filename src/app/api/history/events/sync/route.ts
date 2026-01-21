@@ -80,6 +80,7 @@ export async function POST(request: Request) {
     : 2000;
   const overrideFromTimestamp = Number(body?.fromTimestamp);
   const forceFromTimestamp = Boolean(body?.forceFromTimestamp);
+  const reset = Boolean(body?.reset);
   if (!walletId) {
     return NextResponse.json({ error: "walletId required" }, { status: 400 });
   }
@@ -105,6 +106,26 @@ export async function POST(request: Request) {
   }
 
   const protocol = (wallet.protocol ?? "aave") as Protocol;
+
+  if (reset) {
+    const { error: deleteEventsError } = await supabase
+      .from("strategy_events")
+      .delete()
+      .eq("wallet_id", wallet.id)
+      .eq("user_id", user.id);
+    if (deleteEventsError) {
+      console.error("history.events.reset", deleteEventsError);
+      return NextResponse.json(
+        { error: "Failed to reset events", detail: deleteEventsError.message },
+        { status: 500 },
+      );
+    }
+    await supabase
+      .from("strategy_event_sync")
+      .delete()
+      .eq("wallet_id", wallet.id)
+      .eq("user_id", user.id);
+  }
 
   const { data: syncState } = await supabase
     .from("strategy_event_sync")
