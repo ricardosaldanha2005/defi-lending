@@ -146,12 +146,11 @@ function PnlCard({
 
   const { debtPnl, netDebtFlow } = data;
 
-  // Se não temos debtPnl mas temos dívida atual ou dívida líquida, usar isso como fallback
-  const hasDebt = debtPnl
-    ? debtPnl.currentValueUsd > 0
-    : (currentDebtUsd ?? 0) > 0 || netDebtFlow > 0;
+  // Usar dívida atual como prioridade, depois netDebtFlow
+  const currentDebtValue = currentDebtUsd ?? (debtPnl?.currentValueUsd ?? netDebtFlow);
 
-  if (!hasDebt) {
+  // Se não temos dívida, mostrar mensagem
+  if (currentDebtValue <= 0) {
     return (
       <Card>
         <CardHeader>
@@ -166,10 +165,12 @@ function PnlCard({
     );
   }
 
-  // Se não temos debtPnl calculado, usar dívida atual ou netDebtFlow como aproximação
-  const currentDebtValue = currentDebtUsd ?? netDebtFlow;
+  // Se não temos debtPnl calculado, usar dados dos eventos ou aproximação
   const finalDebtPnl = debtPnl || {
-    borrowedUsd: data.totals.borrowUsd - data.totals.repayUsd,
+    borrowedUsd:
+      data.totals.borrowUsd > 0
+        ? data.totals.borrowUsd - data.totals.repayUsd
+        : currentDebtValue, // Se não temos eventos, assumir que o custo = valor atual
     currentValueUsd: currentDebtValue,
     pnl: 0, // Não podemos calcular P&L sem custo histórico preciso
   };
