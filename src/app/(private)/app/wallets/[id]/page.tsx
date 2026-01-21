@@ -100,7 +100,13 @@ type PnlData = {
   };
 };
 
-function PnlCard({ walletId }: { walletId: string }) {
+function PnlCard({
+  walletId,
+  currentDebtUsd,
+}: {
+  walletId: string;
+  currentDebtUsd?: number;
+}) {
   const fetcher = (url: string) => fetch(url).then((r) => r.json());
   const { data, error, isLoading } = useSWR<PnlData>(
     `/api/history/pnl?walletId=${walletId}`,
@@ -140,10 +146,10 @@ function PnlCard({ walletId }: { walletId: string }) {
 
   const { debtPnl, netDebtFlow } = data;
 
-  // Se não temos debtPnl mas temos dívida líquida, usar isso como fallback
+  // Se não temos debtPnl mas temos dívida atual ou dívida líquida, usar isso como fallback
   const hasDebt = debtPnl
     ? debtPnl.currentValueUsd > 0
-    : netDebtFlow > 0;
+    : (currentDebtUsd ?? 0) > 0 || netDebtFlow > 0;
 
   if (!hasDebt) {
     return (
@@ -160,10 +166,11 @@ function PnlCard({ walletId }: { walletId: string }) {
     );
   }
 
-  // Se não temos debtPnl calculado, usar netDebtFlow como aproximação
+  // Se não temos debtPnl calculado, usar dívida atual ou netDebtFlow como aproximação
+  const currentDebtValue = currentDebtUsd ?? netDebtFlow;
   const finalDebtPnl = debtPnl || {
     borrowedUsd: data.totals.borrowUsd - data.totals.repayUsd,
-    currentValueUsd: netDebtFlow,
+    currentValueUsd: currentDebtValue,
     pnl: 0, // Não podemos calcular P&L sem custo histórico preciso
   };
 
