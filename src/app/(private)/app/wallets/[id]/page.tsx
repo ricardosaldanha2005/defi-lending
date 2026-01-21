@@ -816,7 +816,10 @@ export default function WalletDetailPage() {
         </TabsList>
 
         <TabsContent value="resumo" className="space-y-4">
-          <PnlCard walletId={walletId} />
+          <PnlCard
+            walletId={walletId}
+            currentDebtUsd={totals?.debtUsd}
+          />
           <Card>
             <CardHeader>
               <CardTitle>Recomendações atuais</CardTitle>
