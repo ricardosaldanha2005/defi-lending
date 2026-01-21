@@ -72,6 +72,171 @@ type HistoryEvent = {
   tx_hash: string;
 };
 
+type PnlData = {
+  walletId: string;
+  totals: {
+    supplyUsd: number;
+    withdrawUsd: number;
+    borrowUsd: number;
+    repayUsd: number;
+    liquidationUsd: number;
+    otherUsd: number;
+  };
+  netCollateralFlow: number;
+  netDebtFlow: number;
+  markToMarket?: {
+    pnl: number;
+    currentCollateralValue: number;
+    currentDebtValue: number;
+    historicalCollateralCost: number;
+    historicalDebtCost: number;
+    netPositionValue: number;
+    netHistoricalCost: number;
+  };
+};
+
+function PnlCard({ walletId }: { walletId: string }) {
+  const fetcher = (url: string) => fetch(url).then((r) => r.json());
+  const { data, error, isLoading } = useSWR<PnlData>(
+    `/api/history/pnl?walletId=${walletId}`,
+    fetcher,
+    { refreshInterval: 60000 },
+  );
+
+  if (isLoading) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>P&L Histórico</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-sm text-muted-foreground">A carregar...</p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (error || !data) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>P&L Histórico</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-sm text-muted-foreground">
+            {error
+              ? "Erro ao carregar P&L. Sincroniza os eventos históricos primeiro."
+              : "Nenhum dado disponível."}
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const { totals, netCollateralFlow, netDebtFlow, markToMarket } = data;
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>P&L Histórico</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {markToMarket ? (
+          <>
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <p className="text-sm text-muted-foreground">Mark-to-Market P&L</p>
+                <p
+                  className={`text-2xl font-semibold ${
+                    markToMarket.pnl >= 0 ? "text-green-600" : "text-red-600"
+                  }`}
+                >
+                  {formatUsd(markToMarket.pnl)}
+                </p>
+              </div>
+              <div className="grid gap-2 text-sm md:grid-cols-2">
+                <div>
+                  <p className="text-muted-foreground">Valor atual da posição</p>
+                  <p className="font-medium">
+                    {formatUsd(markToMarket.netPositionValue)}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">Custo histórico</p>
+                  <p className="font-medium">
+                    {formatUsd(markToMarket.netHistoricalCost)}
+                  </p>
+                </div>
+              </div>
+              <Separator />
+              <div className="grid gap-2 text-sm md:grid-cols-2">
+                <div>
+                  <p className="text-muted-foreground">Colateral atual</p>
+                  <p className="font-medium">
+                    {formatUsd(markToMarket.currentCollateralValue)}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">Custo colateral</p>
+                  <p className="font-medium">
+                    {formatUsd(markToMarket.historicalCollateralCost)}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">Dívida atual</p>
+                  <p className="font-medium">
+                    {formatUsd(markToMarket.currentDebtValue)}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">Custo dívida</p>
+                  <p className="font-medium">
+                    {formatUsd(markToMarket.historicalDebtCost)}
+                  </p>
+                </div>
+              </div>
+            </div>
+            <Separator />
+          </>
+        ) : null}
+        <div className="space-y-2">
+          <p className="text-sm font-medium">Fluxos líquidos</p>
+          <div className="grid gap-2 text-sm md:grid-cols-2">
+            <div>
+              <p className="text-muted-foreground">Colateral líquido</p>
+              <p
+                className={`font-medium ${
+                  netCollateralFlow >= 0 ? "text-green-600" : "text-red-600"
+                }`}
+              >
+                {formatUsd(netCollateralFlow)}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                {formatUsd(totals.withdrawUsd)} saídas - {formatUsd(totals.supplyUsd)}{" "}
+                entradas
+              </p>
+            </div>
+            <div>
+              <p className="text-muted-foreground">Dívida líquida</p>
+              <p
+                className={`font-medium ${
+                  netDebtFlow >= 0 ? "text-red-600" : "text-green-600"
+                }`}
+              >
+                {formatUsd(netDebtFlow)}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                {formatUsd(totals.borrowUsd)} empréstimos - {formatUsd(totals.repayUsd)}{" "}
+                pagamentos
+              </p>
+            </div>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 function HistoryEventsTab({
   walletId,
   chain,
@@ -664,6 +829,7 @@ export default function WalletDetailPage() {
         </TabsList>
 
         <TabsContent value="resumo" className="space-y-4">
+          <PnlCard walletId={walletId} />
           <Card>
             <CardHeader>
               <CardTitle>Recomendações atuais</CardTitle>
