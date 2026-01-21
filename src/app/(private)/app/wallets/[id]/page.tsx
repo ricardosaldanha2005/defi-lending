@@ -79,14 +79,75 @@ function HistoryEventsTab({
   walletId: string;
   chain?: string;
 }) {
+  const [eventTypeFilter, setEventTypeFilter] = useState<string>("all");
+  const [assetFilter, setAssetFilter] = useState<string>("all");
+
   const fetcher = (url: string) => fetch(url).then((r) => r.json());
   const { data, error, isLoading } = useSWR<{ events: HistoryEvent[] }>(
-    `/api/history/events?walletId=${walletId}&limit=100`,
+    `/api/history/events?walletId=${walletId}&limit=1000`,
     fetcher,
     { refreshInterval: 30000 },
   );
 
-  const events = data?.events || [];
+  const allEvents = data?.events || [];
+
+  // Get unique event types and assets
+  const eventTypes = useMemo(() => {
+    const types = new Set<string>();
+    allEvents.forEach((e) => {
+      const key = e.event_type.toLowerCase();
+      if (key.includes("borrow")) types.add("borrow");
+      else if (key.includes("repay")) types.add("repay");
+      else if (key.includes("supply") || key.includes("deposit"))
+        types.add("deposit");
+      else if (key.includes("withdraw")) types.add("withdraw");
+      else if (key.includes("liquidat")) types.add("liquidation");
+      else types.add("other");
+    });
+    return Array.from(types).sort();
+  }, [allEvents]);
+
+  const assets = useMemo(() => {
+    const assetSet = new Set<string>();
+    allEvents.forEach((e) => {
+      if (e.asset_symbol) assetSet.add(e.asset_symbol);
+    });
+    return Array.from(assetSet).sort();
+  }, [allEvents]);
+
+  // Filter events
+  const events = useMemo(() => {
+    return allEvents.filter((e) => {
+      if (eventTypeFilter !== "all") {
+        const key = e.event_type.toLowerCase();
+        if (eventTypeFilter === "borrow" && !key.includes("borrow"))
+          return false;
+        if (eventTypeFilter === "repay" && !key.includes("repay")) return false;
+        if (
+          eventTypeFilter === "deposit" &&
+          !key.includes("supply") &&
+          !key.includes("deposit")
+        )
+          return false;
+        if (eventTypeFilter === "withdraw" && !key.includes("withdraw"))
+          return false;
+        if (eventTypeFilter === "liquidation" && !key.includes("liquidat"))
+          return false;
+        if (eventTypeFilter === "other") {
+          const hasKnownType =
+            key.includes("borrow") ||
+            key.includes("repay") ||
+            key.includes("supply") ||
+            key.includes("deposit") ||
+            key.includes("withdraw") ||
+            key.includes("liquidat");
+          if (hasKnownType) return false;
+        }
+      }
+      if (assetFilter !== "all" && e.asset_symbol !== assetFilter) return false;
+      return true;
+    });
+  }, [allEvents, eventTypeFilter, assetFilter]);
 
   const getEventTypeLabel = (type: string) => {
     const key = type.toLowerCase();
@@ -146,7 +207,44 @@ function HistoryEventsTab({
       <CardHeader>
         <CardTitle>Eventos Históricos ({events.length})</CardTitle>
       </CardHeader>
-      <CardContent>
+      <CardContent className="space-y-4">
+        <div className="flex gap-4 items-end">
+          <div className="flex-1">
+            <Label htmlFor="event-type-filter">Tipo de Evento</Label>
+            <Select
+              value={eventTypeFilter}
+              onValueChange={setEventTypeFilter}
+            >
+              <SelectTrigger id="event-type-filter">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos</SelectItem>
+                {eventTypes.map((type) => (
+                  <SelectItem key={type} value={type}>
+                    {type.charAt(0).toUpperCase() + type.slice(1)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="flex-1">
+            <Label htmlFor="asset-filter">Asset</Label>
+            <Select value={assetFilter} onValueChange={setAssetFilter}>
+              <SelectTrigger id="asset-filter">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos</SelectItem>
+                {assets.map((asset) => (
+                  <SelectItem key={asset} value={asset}>
+                    {asset}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
         <div className="overflow-x-auto">
           <Table>
             <TableHeader>
