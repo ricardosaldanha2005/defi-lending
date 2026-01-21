@@ -360,13 +360,17 @@ async function fetchAaveEvents(
             ? (reserve?.[schema.reserveFields.underlyingAsset] as
                 | string
                 | undefined)
-            : reserveAsString ?? undefined,
+            : reserve?.id && typeof reserve.id === "string"
+              ? reserve.id
+              : reserveAsString ?? undefined,
         assetSymbol: schema.reserveNestedFields?.symbol
           ? (nestedReserve?.[
               schema.reserveNestedFields.symbol
             ] as string | undefined)
           : schema.reserveFields?.symbol
             ? (reserve?.[schema.reserveFields.symbol] as string | undefined)
+            : reserve?.symbol && typeof reserve.symbol === "string"
+              ? reserve.symbol
             : undefined,
         assetDecimals: schema.reserveNestedFields?.decimals
           ? (nestedReserve?.[
@@ -776,11 +780,15 @@ function buildAaveSelection(schema: AaveSchemaConfig) {
         fields.push(
           `${schema.reserveField} { ${schema.reserveNestedField} { ${nestedFields.join(" ")} } }`,
         );
+      } else {
+        fields.push(`${schema.reserveField} { ${schema.reserveNestedField} { id } }`);
       }
     } else if (reserveFields.length > 0) {
       fields.push(
         `${schema.reserveField} { ${reserveFields.join(" ")} }`,
       );
+    } else {
+      fields.push(`${schema.reserveField} { id symbol decimals }`);
     }
   }
   return fields.join("\n");

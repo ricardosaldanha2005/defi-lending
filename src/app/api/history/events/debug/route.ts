@@ -172,6 +172,37 @@ export async function GET(request: Request) {
       .filter((field) => unwrapTypeName(field.type))
       .map((field) => field.name);
 
+    const requiredArgs = targetField.args
+      .filter((arg) => arg.type.kind === "NON_NULL")
+      .map((arg) => arg.name);
+    const whereArg = targetField.args.find((arg) => arg.name === "where");
+    const whereTypeName = whereArg ? unwrapTypeName(whereArg.type) : null;
+    const whereClause = requiredArgs.includes("where") ? "where: {}" : "";
+    const orderByClause = eventFields.some((field) => field.name === "timestamp")
+      ? "orderBy: timestamp, orderDirection: asc"
+      : "";
+    const args = [whereClause, orderByClause, "first: 1", "skip: 0"]
+      .filter(Boolean)
+      .join(", ");
+    const selection = `
+      id
+      amount
+      amountUSD
+      timestamp
+      asset { id symbol decimals }
+    `;
+    const sample = await postGraphQL<Record<string, Array<Record<string, unknown>> | undefined>>(
+      subgraphUrl,
+      `
+        query SampleEvent {
+          ${targetField.name}(${args}) {
+            ${selection}
+          }
+        }
+      `,
+      {},
+    );
+
     return NextResponse.json({
       queryFields: queryFields.map((field) => ({
         name: field.name,
@@ -184,6 +215,8 @@ export async function GET(request: Request) {
         type: unwrapTypeName(field.type),
       })),
       nestedCandidates,
+      whereTypeName,
+      sample: sample[targetField.name]?.[0] ?? null,
     });
   } catch (error) {
     console.error("history.events.debug", error);
