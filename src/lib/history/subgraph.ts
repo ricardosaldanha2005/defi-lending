@@ -362,6 +362,8 @@ async function fetchAaveEvents(
                 | undefined)
             : reserve?.id && typeof reserve.id === "string"
               ? reserve.id
+            : reserve?.id && typeof reserve.id === "string"
+              ? reserve.id
               : reserveAsString ?? undefined,
         assetSymbol: schema.reserveNestedFields?.symbol
           ? (nestedReserve?.[
@@ -378,6 +380,8 @@ async function fetchAaveEvents(
             ] as number | string | undefined)
           : schema.reserveFields?.decimals
             ? (reserve?.[schema.reserveFields.decimals] as number | string | undefined)
+            : reserve?.decimals && typeof reserve.decimals === "number"
+              ? reserve.decimals
             : undefined,
           amountRaw: schema.fields.amount
             ? (raw[schema.fields.amount] as string | undefined)
@@ -678,9 +682,9 @@ async function buildAaveConfigFromField(
         "id",
       ]);
       reserveFields = {
-        symbol: pickField(reserveTypeFields, ["symbol", "name"]),
+        symbol: pickField(reserveTypeFields, ["symbol", "name"]) ?? "symbol",
         underlyingAsset: underlyingAssetField ?? "id",
-        decimals: pickField(reserveTypeFields, ["decimals"]),
+        decimals: pickField(reserveTypeFields, ["decimals"]) ?? "decimals",
       };
     }
   }
