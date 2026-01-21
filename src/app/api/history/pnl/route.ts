@@ -363,7 +363,10 @@ export async function GET(request: Request) {
   }
 
   // Calculate debt P&L: quanto emprestaste vs quanto vale agora
-  const debtPnl = currentDebtValue - historicalDebtCost;
+  // "Quanto emprestaste" = Total líquido emprestado (borrows - repays) em USD histórico
+  // Este valor não muda - é a soma histórica dos borrows menos os repays
+  const totalBorrowedUsd = totals.borrowUsd - totals.repayUsd;
+  const debtPnl = currentDebtValue - totalBorrowedUsd;
 
   return NextResponse.json({
     walletId,
@@ -371,7 +374,7 @@ export async function GET(request: Request) {
     netCollateralFlow,
     netDebtFlow,
     debtPnl: {
-      borrowedUsd: historicalDebtCost, // Quanto emprestaste (custo histórico)
+      borrowedUsd: totalBorrowedUsd, // Quanto emprestaste (total líquido em USD histórico)
       currentValueUsd: currentDebtValue, // Quanto vale agora
       pnl: debtPnl, // P&L = Valor atual - Custo histórico
     },
