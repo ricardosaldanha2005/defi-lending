@@ -74,6 +74,7 @@ type AaveSchemaConfig = {
   requiresWhere?: boolean;
   orderByField?: string;
   reserveField?: string;
+  assetField?: string;
   reserveNestedField?: string;
   reserveFields?: {
     symbol?: string;
@@ -318,9 +319,17 @@ async function fetchAaveEvents(
         schema.reserveField && raw[schema.reserveField]
           ? raw[schema.reserveField]
           : null;
+      const assetValue =
+        schema.assetField && raw[schema.assetField]
+          ? raw[schema.assetField]
+          : null;
       const reserve =
         reserveValue && typeof reserveValue === "object"
           ? ((reserveValue as Record<string, unknown>) ?? null)
+          : null;
+      const asset =
+        assetValue && typeof assetValue === "object"
+          ? ((assetValue as Record<string, unknown>) ?? null)
           : null;
       let nestedReserve: Record<string, unknown> | null = null;
       if (reserve && schema.reserveNestedField && reserve[schema.reserveNestedField]) {
@@ -362,9 +371,9 @@ async function fetchAaveEvents(
                 | undefined)
             : reserve?.id && typeof reserve.id === "string"
               ? reserve.id
-            : reserve?.id && typeof reserve.id === "string"
-              ? reserve.id
-              : reserveAsString ?? undefined,
+              : asset?.id && typeof asset.id === "string"
+                ? asset.id
+                : reserveAsString ?? undefined,
         assetSymbol: schema.reserveNestedFields?.symbol
           ? (nestedReserve?.[
               schema.reserveNestedFields.symbol
@@ -373,6 +382,8 @@ async function fetchAaveEvents(
             ? (reserve?.[schema.reserveFields.symbol] as string | undefined)
             : reserve?.symbol && typeof reserve.symbol === "string"
               ? reserve.symbol
+              : asset?.symbol && typeof asset.symbol === "string"
+                ? asset.symbol
             : undefined,
         assetDecimals: schema.reserveNestedFields?.decimals
           ? (nestedReserve?.[
@@ -382,6 +393,8 @@ async function fetchAaveEvents(
             ? (reserve?.[schema.reserveFields.decimals] as number | string | undefined)
             : reserve?.decimals && typeof reserve.decimals === "number"
               ? reserve.decimals
+              : asset?.decimals && typeof asset.decimals === "number"
+                ? asset.decimals
             : undefined,
           amountRaw: schema.fields.amount
             ? (raw[schema.fields.amount] as string | undefined)
@@ -594,6 +607,7 @@ async function buildAaveConfigFromField(
     "token",
     "inputToken",
   ]);
+  const assetField = pickField(eventFields, ["asset"]);
   if (!timestampField) {
     return null;
   }
@@ -752,6 +766,7 @@ async function buildAaveConfigFromField(
     requiresWhere: requiredArgs.includes("where"),
     orderByField: timestampField,
     reserveField,
+    assetField,
     reserveNestedField,
     reserveFields,
     reserveNestedFields,
@@ -769,6 +784,9 @@ function buildAaveSelection(schema: AaveSchemaConfig) {
   if (schema.fields.logIndex) fields.push(schema.fields.logIndex);
   if (schema.fields.blockNumber) fields.push(schema.fields.blockNumber);
   if (schema.fields.txHash) fields.push(schema.fields.txHash);
+  if (schema.assetField && schema.reserveField !== "asset") {
+    fields.push("asset { id symbol decimals }");
+  }
   if (schema.reserveField) {
     if (schema.reserveField === "asset") {
       fields.push("asset { id symbol decimals }");
