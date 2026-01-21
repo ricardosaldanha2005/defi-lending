@@ -138,9 +138,14 @@ function PnlCard({ walletId }: { walletId: string }) {
     );
   }
 
-  const { debtPnl } = data;
+  const { debtPnl, netDebtFlow } = data;
 
-  if (!debtPnl || debtPnl.currentValueUsd === 0) {
+  // Se não temos debtPnl mas temos dívida líquida, usar isso como fallback
+  const hasDebt = debtPnl
+    ? debtPnl.currentValueUsd > 0
+    : netDebtFlow > 0;
+
+  if (!hasDebt) {
     return (
       <Card>
         <CardHeader>
@@ -155,6 +160,13 @@ function PnlCard({ walletId }: { walletId: string }) {
     );
   }
 
+  // Se não temos debtPnl calculado, usar netDebtFlow como aproximação
+  const finalDebtPnl = debtPnl || {
+    borrowedUsd: data.totals.borrowUsd - data.totals.repayUsd,
+    currentValueUsd: netDebtFlow,
+    pnl: 0, // Não podemos calcular P&L sem custo histórico preciso
+  };
+
   return (
     <Card>
       <CardHeader>
@@ -165,31 +177,40 @@ function PnlCard({ walletId }: { walletId: string }) {
           <div className="flex items-center justify-between">
             <p className="text-sm text-muted-foreground">Quanto emprestaste (USD)</p>
             <p className="text-lg font-semibold">
-              {formatUsd(debtPnl.borrowedUsd)}
+              {formatUsd(finalDebtPnl.borrowedUsd)}
             </p>
           </div>
           <div className="flex items-center justify-between">
             <p className="text-sm text-muted-foreground">Valor atual do empréstimo (USD)</p>
             <p className="text-lg font-semibold">
-              {formatUsd(debtPnl.currentValueUsd)}
+              {formatUsd(finalDebtPnl.currentValueUsd)}
             </p>
           </div>
-          <Separator />
-          <div className="flex items-center justify-between">
-            <p className="text-sm font-medium">P&L</p>
-            <p
-              className={`text-2xl font-bold ${
-                debtPnl.pnl >= 0 ? "text-green-600" : "text-red-600"
-              }`}
-            >
-              {formatUsd(debtPnl.pnl)}
+          {finalDebtPnl.pnl !== 0 && (
+            <>
+              <Separator />
+              <div className="flex items-center justify-between">
+                <p className="text-sm font-medium">P&L</p>
+                <p
+                  className={`text-2xl font-bold ${
+                    finalDebtPnl.pnl >= 0 ? "text-green-600" : "text-red-600"
+                  }`}
+                >
+                  {formatUsd(finalDebtPnl.pnl)}
+                </p>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {finalDebtPnl.pnl >= 0
+                  ? "Ganho: o empréstimo vale menos agora (moeda desvalorizou)"
+                  : "Perda: o empréstimo vale mais agora (moeda valorizou)"}
+              </p>
+            </>
+          )}
+          {!debtPnl && (
+            <p className="text-xs text-muted-foreground">
+              Nota: Sincroniza os eventos históricos para calcular o P&L preciso.
             </p>
-          </div>
-          <p className="text-xs text-muted-foreground">
-            {debtPnl.pnl >= 0
-              ? "Ganho: o empréstimo vale menos agora (moeda desvalorizou)"
-              : "Perda: o empréstimo vale mais agora (moeda valorizou)"}
-          </p>
+          )}
         </div>
       </CardContent>
     </Card>
