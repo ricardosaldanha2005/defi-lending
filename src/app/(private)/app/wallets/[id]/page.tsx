@@ -114,6 +114,31 @@ function PnlCard({
     { refreshInterval: 60000 },
   );
 
+  // Debug: verificar se temos dívida atual
+  // Se temos dívida atual mas não temos dados do P&L ainda, mostrar dados básicos
+  if (!isLoading && !error && currentDebtUsd && currentDebtUsd > 0 && !data) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>P&L do Empréstimo</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <p className="text-sm text-muted-foreground">Valor atual do empréstimo (USD)</p>
+              <p className="text-lg font-semibold">
+                {formatUsd(currentDebtUsd)}
+              </p>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Sincroniza os eventos históricos para ver quanto emprestaste e calcular o P&L.
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
   if (isLoading) {
     return (
       <Card>
