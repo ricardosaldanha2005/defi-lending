@@ -86,6 +86,15 @@ type AaveSchemaConfig = {
     underlyingAsset?: string;
     decimals?: string;
   };
+  positionField?: string;
+  positionMarketField?: string;
+  positionMarketTokenField?: string;
+  positionMarketTokenListField?: string;
+  positionMarketTokenFields?: {
+    symbol?: string;
+    underlyingAsset?: string;
+    decimals?: string;
+  };
   fallbackEventType?: string;
 };
 
@@ -323,6 +332,35 @@ async function fetchAaveEvents(
         schema.assetField && raw[schema.assetField]
           ? raw[schema.assetField]
           : null;
+      const positionValue =
+        schema.positionField && raw[schema.positionField]
+          ? raw[schema.positionField]
+          : null;
+      const position =
+        positionValue && typeof positionValue === "object"
+          ? ((positionValue as Record<string, unknown>) ?? null)
+          : null;
+      const positionMarket =
+        position &&
+        schema.positionMarketField &&
+        position[schema.positionMarketField] &&
+        typeof position[schema.positionMarketField] === "object"
+          ? ((position[schema.positionMarketField] as Record<string, unknown>) ??
+              null)
+          : null;
+      const positionTokenValue =
+        positionMarket && schema.positionMarketTokenField
+          ? positionMarket[schema.positionMarketTokenField]
+          : schema.positionMarketTokenListField
+            ? positionMarket?.[schema.positionMarketTokenListField]
+            : null;
+      const positionToken =
+        Array.isArray(positionTokenValue)
+          ? ((positionTokenValue[0] as Record<string, unknown> | undefined) ??
+              null)
+          : positionTokenValue && typeof positionTokenValue === "object"
+            ? ((positionTokenValue as Record<string, unknown>) ?? null)
+            : null;
       const reserve =
         reserveValue && typeof reserveValue === "object"
           ? ((reserveValue as Record<string, unknown>) ?? null)
@@ -373,6 +411,12 @@ async function fetchAaveEvents(
               ? reserve.id
               : asset?.id && typeof asset.id === "string"
                 ? asset.id
+                : schema.positionMarketTokenFields?.underlyingAsset
+                  ? (positionToken?.[
+                      schema.positionMarketTokenFields.underlyingAsset
+                    ] as string | undefined)
+                  : positionToken?.id && typeof positionToken.id === "string"
+                    ? positionToken.id
                 : reserveAsString ?? undefined,
         assetSymbol: schema.reserveNestedFields?.symbol
           ? (nestedReserve?.[
@@ -384,6 +428,12 @@ async function fetchAaveEvents(
               ? reserve.symbol
               : asset?.symbol && typeof asset.symbol === "string"
                 ? asset.symbol
+                : schema.positionMarketTokenFields?.symbol
+                  ? (positionToken?.[
+                      schema.positionMarketTokenFields.symbol
+                    ] as string | undefined)
+                  : positionToken?.symbol && typeof positionToken.symbol === "string"
+                    ? positionToken.symbol
             : undefined,
         assetDecimals: schema.reserveNestedFields?.decimals
           ? (nestedReserve?.[
@@ -395,6 +445,12 @@ async function fetchAaveEvents(
               ? reserve.decimals
               : asset?.decimals && typeof asset.decimals === "number"
                 ? asset.decimals
+                : schema.positionMarketTokenFields?.decimals
+                  ? (positionToken?.[
+                      schema.positionMarketTokenFields.decimals
+                    ] as number | string | undefined)
+                  : positionToken?.decimals && typeof positionToken.decimals === "number"
+                    ? positionToken.decimals
             : undefined,
           amountRaw: schema.fields.amount
             ? (raw[schema.fields.amount] as string | undefined)
@@ -608,6 +664,7 @@ async function buildAaveConfigFromField(
     "inputToken",
   ]);
   const assetField = pickField(eventFields, ["asset"]);
+  const positionField = pickField(eventFields, ["position"]);
   if (!timestampField) {
     return null;
   }
@@ -703,6 +760,97 @@ async function buildAaveConfigFromField(
     }
   }
 
+  let positionMarketField: string | undefined;
+  let positionMarketTokenField: string | undefined;
+  let positionMarketTokenListField: string | undefined;
+  let positionMarketTokenFields: AaveSchemaConfig["positionMarketTokenFields"];
+
+  if (positionField) {
+    const positionTypeName = unwrapTypeName(
+      eventFields.find((field) => field.name === positionField)?.type,
+    );
+    if (positionTypeName) {
+      const positionTypeInfo = await postGraphQL<{
+        __type?: { fields?: Array<{ name: string; type: TypeRef }> };
+      }>(
+        url,
+        `
+          query PositionType($name: String!) {
+            __type(name: $name) {
+              fields {
+                name
+                type { kind name ofType { kind name ofType { kind name } } }
+              }
+            }
+          }
+        `,
+        { name: positionTypeName },
+      );
+      const positionFields = positionTypeInfo.__type?.fields ?? [];
+      positionMarketField = pickField(positionFields, ["market"]);
+      if (positionMarketField) {
+        const marketTypeName = unwrapTypeName(
+          positionFields.find((field) => field.name === positionMarketField)?.type,
+        );
+        if (marketTypeName) {
+          const marketTypeInfo = await postGraphQL<{
+            __type?: { fields?: Array<{ name: string; type: TypeRef }> };
+          }>(
+            url,
+            `
+              query MarketType($name: String!) {
+                __type(name: $name) {
+                  fields {
+                    name
+                    type { kind name ofType { kind name ofType { kind name } } }
+                  }
+                }
+              }
+            `,
+            { name: marketTypeName },
+          );
+          const marketFields = marketTypeInfo.__type?.fields ?? [];
+          positionMarketTokenField = pickField(marketFields, [
+            "inputToken",
+            "outputToken",
+            "asset",
+            "token",
+          ]);
+          positionMarketTokenListField = pickField(marketFields, ["inputTokens"]);
+          const tokenTypeName = unwrapTypeName(
+            marketFields.find(
+              (field) =>
+                field.name ===
+                (positionMarketTokenField ?? positionMarketTokenListField),
+            )?.type,
+          );
+          if (tokenTypeName) {
+            const tokenTypeInfo = await postGraphQL<{
+              __type?: { fields?: Array<{ name: string }> };
+            }>(
+              url,
+              `
+                query MarketTokenType($name: String!) {
+                  __type(name: $name) {
+                    fields { name }
+                  }
+                }
+              `,
+              { name: tokenTypeName },
+            );
+            const tokenFields = tokenTypeInfo.__type?.fields ?? [];
+            positionMarketTokenFields = {
+              symbol: pickField(tokenFields, ["symbol", "name"]) ?? "symbol",
+              underlyingAsset:
+                pickField(tokenFields, ["id", "tokenAddress", "address"]) ?? "id",
+              decimals: pickField(tokenFields, ["decimals"]) ?? "decimals",
+            };
+          }
+        }
+      }
+    }
+  }
+
   const directUserArg = queryField.args.find((arg) =>
     ["user", "account"].includes(arg.name),
   )?.name;
@@ -770,6 +918,11 @@ async function buildAaveConfigFromField(
     reserveNestedField,
     reserveFields,
     reserveNestedFields,
+    positionField,
+    positionMarketField,
+    positionMarketTokenField,
+    positionMarketTokenListField,
+    positionMarketTokenFields,
     fallbackEventType: queryField.name,
   };
 }
@@ -816,6 +969,24 @@ function buildAaveSelection(schema: AaveSchemaConfig) {
       );
     } else {
       fields.push(`${schema.reserveField} { id symbol decimals }`);
+    }
+  }
+  if (schema.positionField && schema.positionMarketField) {
+    const tokenFields = [
+      schema.positionMarketTokenFields?.underlyingAsset,
+      schema.positionMarketTokenFields?.symbol,
+      schema.positionMarketTokenFields?.decimals,
+    ].filter(Boolean);
+    const tokenSelection =
+      tokenFields.length > 0 ? tokenFields.join(" ") : "id symbol decimals";
+    if (schema.positionMarketTokenField) {
+      fields.push(
+        `${schema.positionField} { ${schema.positionMarketField} { ${schema.positionMarketTokenField} { ${tokenSelection} } } }`,
+      );
+    } else if (schema.positionMarketTokenListField) {
+      fields.push(
+        `${schema.positionField} { ${schema.positionMarketField} { ${schema.positionMarketTokenListField} { ${tokenSelection} } } }`,
+      );
     }
   }
   return fields.join("\n");
