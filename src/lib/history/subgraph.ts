@@ -770,6 +770,10 @@ function buildAaveSelection(schema: AaveSchemaConfig) {
   if (schema.fields.blockNumber) fields.push(schema.fields.blockNumber);
   if (schema.fields.txHash) fields.push(schema.fields.txHash);
   if (schema.reserveField) {
+    if (schema.reserveField === "asset") {
+      fields.push("asset { id symbol decimals }");
+      return fields.join("\n");
+    }
     const reserveFields = [
       schema.reserveFields?.symbol,
       schema.reserveFields?.underlyingAsset,
