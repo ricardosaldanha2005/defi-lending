@@ -58,8 +58,10 @@ async function fetchCurrentPosition(
         compoundChain,
         false,
       );
+      // For Compound, we don't have asset address in reserves
+      // We'll use symbol as a fallback identifier
       return reserves.map((r) => ({
-        address: (r.asset || "").toLowerCase(),
+        address: r.symbol?.toLowerCase() || "", // Use symbol as fallback since Compound doesn't provide asset address
         symbol: r.symbol || "",
         collateralAmount: r.collateralAmount || 0,
         collateralUsd: r.collateralUsd || 0,
