@@ -114,7 +114,33 @@ function PnlCard({
     { refreshInterval: 60000 },
   );
 
+  // Verificar primeiro se temos dívida atual (mesmo sem dados do P&L)
+  const hasCurrentDebt = (currentDebtUsd ?? 0) > 0;
+
   if (isLoading) {
+    // Se temos dívida mas está a carregar, mostrar dívida atual
+    if (hasCurrentDebt) {
+      return (
+        <Card>
+          <CardHeader>
+            <CardTitle>P&L do Empréstimo</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <p className="text-sm text-muted-foreground">Valor atual do empréstimo (USD)</p>
+                <p className="text-lg font-semibold">
+                  {formatUsd(currentDebtUsd!)}
+                </p>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                A carregar dados históricos...
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      );
+    }
     return (
       <Card>
         <CardHeader>
@@ -127,7 +153,32 @@ function PnlCard({
     );
   }
 
+  // Se temos erro mas temos dívida atual, mostrar dívida mesmo assim
   if (error || !data) {
+    if (hasCurrentDebt) {
+      return (
+        <Card>
+          <CardHeader>
+            <CardTitle>P&L do Empréstimo</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <p className="text-sm text-muted-foreground">Valor atual do empréstimo (USD)</p>
+                <p className="text-lg font-semibold">
+                  {formatUsd(currentDebtUsd!)}
+                </p>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {error
+                  ? "Erro ao carregar dados históricos. Sincroniza os eventos para ver o P&L."
+                  : "Sincroniza os eventos históricos para ver quanto emprestaste e calcular o P&L."}
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      );
+    }
     return (
       <Card>
         <CardHeader>
