@@ -671,14 +671,15 @@ async function buildAaveConfigFromField(
           };
         }
       }
+      const underlyingAssetField = pickField(reserveTypeFields, [
+        "underlyingAsset",
+        "underlyingAssetAddress",
+        "tokenAddress",
+        "id",
+      ]);
       reserveFields = {
         symbol: pickField(reserveTypeFields, ["symbol", "name"]),
-        underlyingAsset: pickField(reserveTypeFields, [
-          "underlyingAsset",
-          "underlyingAssetAddress",
-          "tokenAddress",
-          "id",
-        ]),
+        underlyingAsset: underlyingAssetField ?? "id",
         decimals: pickField(reserveTypeFields, ["decimals"]),
       };
     }
