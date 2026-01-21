@@ -42,6 +42,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { PROTOCOL_LABELS, Protocol } from "@/lib/protocols";
+import useSWR from "swr";
 
 type WalletDetail = {
   id: string;
@@ -60,6 +61,161 @@ type ReserveSummary = {
   debtUsd: number;
   priceInUsd: number;
 };
+
+type HistoryEvent = {
+  id: string;
+  event_type: string;
+  asset_symbol: string | null;
+  amount: number | null;
+  amount_usd: number | null;
+  block_timestamp: string;
+  tx_hash: string;
+};
+
+function HistoryEventsTab({
+  walletId,
+  chain,
+}: {
+  walletId: string;
+  chain?: string;
+}) {
+  const fetcher = (url: string) => fetch(url).then((r) => r.json());
+  const { data, error, isLoading } = useSWR<{ events: HistoryEvent[] }>(
+    `/api/history/events?walletId=${walletId}&limit=100`,
+    fetcher,
+    { refreshInterval: 30000 },
+  );
+
+  const events = data?.events || [];
+
+  const getEventTypeLabel = (type: string) => {
+    const key = type.toLowerCase();
+    if (key.includes("borrow")) return "Borrow";
+    if (key.includes("repay")) return "Repay";
+    if (key.includes("supply") || key.includes("deposit")) return "Deposit";
+    if (key.includes("withdraw")) return "Withdraw";
+    if (key.includes("liquidat")) return "Liquidation";
+    return type;
+  };
+
+  const getEventTypeColor = (type: string) => {
+    const key = type.toLowerCase();
+    if (key.includes("borrow")) return "destructive";
+    if (key.includes("repay")) return "default";
+    if (key.includes("supply") || key.includes("deposit")) return "default";
+    if (key.includes("withdraw")) return "secondary";
+    if (key.includes("liquidat")) return "destructive";
+    return "outline";
+  };
+
+  if (isLoading) {
+    return (
+      <Card>
+        <CardContent className="py-8 text-center text-sm text-muted-foreground">
+          A carregar eventos...
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (error) {
+    return (
+      <Card>
+        <CardContent className="py-8 text-center text-sm text-destructive">
+          Erro ao carregar eventos.
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (events.length === 0) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Eventos Históricos</CardTitle>
+        </CardHeader>
+        <CardContent className="py-8 text-center text-sm text-muted-foreground">
+          Nenhum evento encontrado. Sincroniza os eventos históricos primeiro.
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Eventos Históricos ({events.length})</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="overflow-x-auto">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Data</TableHead>
+                <TableHead>Tipo</TableHead>
+                <TableHead>Asset</TableHead>
+                <TableHead className="text-right">Quantidade</TableHead>
+                <TableHead className="text-right">Valor (USD)</TableHead>
+                <TableHead>TX</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {events.map((event) => (
+                <TableRow key={event.id}>
+                  <TableCell className="text-sm">
+                    {new Date(event.block_timestamp).toLocaleDateString("pt-PT", {
+                      year: "numeric",
+                      month: "short",
+                      day: "numeric",
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant={getEventTypeColor(event.event_type) as any}>
+                      {getEventTypeLabel(event.event_type)}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="font-mono text-sm">
+                    {event.asset_symbol || "-"}
+                  </TableCell>
+                  <TableCell className="text-right font-mono text-sm">
+                    {event.amount != null
+                      ? formatToken(event.amount, event.asset_symbol || "", 4)
+                      : "-"}
+                  </TableCell>
+                  <TableCell className="text-right font-mono text-sm">
+                    {event.amount_usd != null ? formatUsd(event.amount_usd) : "-"}
+                  </TableCell>
+                  <TableCell>
+                    {event.tx_hash && event.tx_hash !== "0x" ? (
+                      <a
+                        href={
+                          chain === "arbitrum"
+                            ? `https://arbiscan.io/tx/${event.tx_hash}`
+                            : chain === "base"
+                              ? `https://basescan.org/tx/${event.tx_hash}`
+                              : `https://polygonscan.com/tx/${event.tx_hash}`
+                        }
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs text-muted-foreground hover:underline font-mono"
+                      >
+                        {event.tx_hash.slice(0, 10)}...
+                      </a>
+                    ) : (
+                      <span className="text-xs text-muted-foreground font-mono">-</span>
+                    )}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
 
 export default function WalletDetailPage() {
   const params = useParams();
@@ -406,6 +562,7 @@ export default function WalletDetailPage() {
           <TabsTrigger value="dividas">Dívidas</TabsTrigger>
           <TabsTrigger value="colateral">Colateral</TabsTrigger>
           <TabsTrigger value="simulador">Simulador</TabsTrigger>
+          <TabsTrigger value="historico">Histórico</TabsTrigger>
         </TabsList>
 
         <TabsContent value="resumo" className="space-y-4">
@@ -703,6 +860,10 @@ export default function WalletDetailPage() {
               </div>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="historico" className="space-y-4">
+          <HistoryEventsTab walletId={walletId} chain={wallet?.chain} />
         </TabsContent>
       </Tabs>
 
