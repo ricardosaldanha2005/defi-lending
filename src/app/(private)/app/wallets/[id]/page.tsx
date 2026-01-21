@@ -140,6 +140,12 @@ function PnlCard({ walletId }: { walletId: string }) {
   const totalSaidas = totals.withdrawUsd + totals.repayUsd;
   const saldoLiquido = totalEntradas - totalSaidas;
 
+  // Corrigir cálculos: netCollateralFlow vem invertido do backend (withdraw - supply)
+  // Queremos mostrar: depósitos - retiradas (o que ficou na carteira)
+  const collateralLiquido = totals.supplyUsd - totals.withdrawUsd;
+  // netDebtFlow está correto: borrow - repay (dívida atual)
+  const dividaLiquida = totals.borrowUsd - totals.repayUsd;
+
   return (
     <Card>
       <CardHeader>
@@ -185,10 +191,10 @@ function PnlCard({ walletId }: { walletId: string }) {
                 <span className="text-muted-foreground">Líquido</span>
                 <span
                   className={`font-semibold ${
-                    netCollateralFlow >= 0 ? "text-green-600" : "text-red-600"
+                    collateralLiquido >= 0 ? "text-green-600" : "text-red-600"
                   }`}
                 >
-                  {formatUsd(netCollateralFlow)}
+                  {formatUsd(collateralLiquido)}
                 </span>
               </div>
             </div>
@@ -215,10 +221,10 @@ function PnlCard({ walletId }: { walletId: string }) {
                 <span className="text-muted-foreground">Líquido</span>
                 <span
                   className={`font-semibold ${
-                    netDebtFlow >= 0 ? "text-red-600" : "text-green-600"
+                    dividaLiquida >= 0 ? "text-red-600" : "text-green-600"
                   }`}
                 >
-                  {formatUsd(netDebtFlow)}
+                  {formatUsd(dividaLiquida)}
                 </span>
               </div>
             </div>
