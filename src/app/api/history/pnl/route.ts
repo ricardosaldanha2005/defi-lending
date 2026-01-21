@@ -1,7 +1,15 @@
 import { NextResponse } from "next/server";
+import { isAddress } from "viem";
 
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { Protocol } from "@/lib/protocols";
+import { fetchUserReservesData, fetchReservesData } from "@/lib/aave/queries";
+import { fetchAssetPrices } from "@/lib/aave/protocolDataProvider";
+import { parseAaveChain } from "@/lib/aave/chains";
+import { applyIndex, toUsd } from "@/lib/aave/math";
+import { formatUnits } from "viem";
+import { fetchCompoundUserReserves } from "@/lib/compound/queries";
+import { parseCompoundChain } from "@/lib/compound/chains";
 
 type PnlRow = {
   event_type: string;
@@ -38,40 +46,128 @@ async function fetchCurrentPosition(
   protocol: Protocol,
 ): Promise<AssetPosition[]> {
   try {
-    const protocolPath = protocol === "compound" ? "compound" : "aave";
-    // Use relative URL - will work in both dev and production
-    const url = new URL(
-      `/api/${protocolPath}/user-reserves?address=${address}&chain=${chain}`,
-      process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000",
-    );
-    const response = await fetch(url.toString(), {
-      cache: "no-store",
-      headers: {
-        // Forward any auth headers if needed
-      },
-    });
-    if (!response.ok) {
-      console.warn(
-        "Failed to fetch current position",
-        response.status,
-        await response.text().catch(() => ""),
+    if (!isAddress(address)) {
+      console.warn("Invalid address", address);
+      return [];
+    }
+
+    if (protocol === "compound") {
+      const compoundChain = parseCompoundChain(chain) ?? "arbitrum";
+      const { reserves } = await fetchCompoundUserReserves(
+        address as `0x${string}`,
+        compoundChain,
+        false,
       );
-      return [];
+      return reserves.map((r) => ({
+        address: (r.asset || "").toLowerCase(),
+        symbol: r.symbol || "",
+        collateralAmount: r.collateralAmount || 0,
+        collateralUsd: r.collateralUsd || 0,
+        debtAmount: r.debtAmount || 0,
+        debtUsd: r.debtUsd || 0,
+        priceInUsd: r.priceInUsd || 0,
+      }));
+    } else {
+      // Aave
+      const aaveChain = parseAaveChain(chain) ?? "polygon";
+      const [reservesData, userReservesData] = await Promise.all([
+        fetchReservesData(aaveChain),
+        fetchUserReservesData(address as `0x${string}`, aaveChain),
+      ]);
+
+      const { reserves, baseCurrency } = reservesData;
+      const { userReserves } = userReservesData;
+
+      const reserveMap = new Map(
+        reserves.map((reserve) => [
+          reserve.underlyingAsset.toLowerCase(),
+          reserve,
+        ]),
+      );
+
+      const assetAddresses = Array.from(
+        new Set(reserves.map((r) => r.underlyingAsset as `0x${string}`)),
+      );
+      const priceMap = await fetchAssetPrices(assetAddresses, aaveChain);
+
+      return userReserves
+        .filter((ur) => {
+          const reserve = reserveMap.get(ur.underlyingAsset.toLowerCase());
+          if (!reserve) return false;
+          const aTokenBalance = BigInt(ur.scaledATokenBalance || "0");
+          const variableDebt = BigInt(ur.scaledVariableDebt || "0");
+          const stableDebt = BigInt(ur.principalStableDebt || "0");
+          return aTokenBalance > 0 || variableDebt > 0 || stableDebt > 0;
+        })
+        .map((ur) => {
+          const reserve = reserveMap.get(ur.underlyingAsset.toLowerCase())!;
+          const asset = {
+            symbol: reserve.symbol,
+            decimals: Number(reserve.decimals),
+          };
+
+          const aTokenBalance = applyIndex(
+            BigInt(ur.scaledATokenBalance || "0"),
+            BigInt(reserve.liquidityIndex || "0"),
+          );
+          const variableDebt = applyIndex(
+            BigInt(ur.scaledVariableDebt || "0"),
+            BigInt(reserve.variableBorrowIndex || "0"),
+          );
+          const stableDebt = BigInt(ur.principalStableDebt || "0");
+          const totalDebt = variableDebt + stableDebt;
+
+          const collateralAmount = Number(
+            formatUnits(aTokenBalance, Number(asset.decimals)),
+          );
+          const debtAmount = Number(
+            formatUnits(totalDebt, Number(asset.decimals)),
+          );
+
+          const priceInMarketReferenceCurrency =
+            priceMap.get(reserve.underlyingAsset.toLowerCase()) ?? BigInt(0);
+
+          const collateralUsd = toUsd({
+            amount: aTokenBalance,
+            decimals: Number(asset.decimals),
+            priceInMarketReferenceCurrency,
+            marketReferenceCurrencyUnit: baseCurrency.marketReferenceCurrencyUnit,
+            marketReferenceCurrencyPriceInUsd:
+              baseCurrency.marketReferenceCurrencyPriceInUsd,
+            priceDecimals: baseCurrency.networkBaseTokenPriceDecimals,
+          });
+
+          const debtUsd = toUsd({
+            amount: totalDebt,
+            decimals: Number(asset.decimals),
+            priceInMarketReferenceCurrency,
+            marketReferenceCurrencyUnit: baseCurrency.marketReferenceCurrencyUnit,
+            marketReferenceCurrencyPriceInUsd:
+              baseCurrency.marketReferenceCurrencyPriceInUsd,
+            priceDecimals: baseCurrency.networkBaseTokenPriceDecimals,
+          });
+
+          const priceInUsd = toUsd({
+            amount: BigInt(10 ** Number(asset.decimals)),
+            decimals: Number(asset.decimals),
+            priceInMarketReferenceCurrency,
+            marketReferenceCurrencyUnit: baseCurrency.marketReferenceCurrencyUnit,
+            marketReferenceCurrencyPriceInUsd:
+              baseCurrency.marketReferenceCurrencyPriceInUsd,
+            priceDecimals: baseCurrency.networkBaseTokenPriceDecimals,
+          });
+
+          return {
+            address: reserve.underlyingAsset.toLowerCase(),
+            symbol: asset.symbol,
+            collateralAmount,
+            collateralUsd,
+            debtAmount,
+            debtUsd,
+            priceInUsd,
+          };
+        });
     }
-    const data = await response.json();
-    if (data.error) {
-      console.warn("Error fetching current position", data.error);
-      return [];
-    }
-    return (data.reserves || []).map((r: any) => ({
-      address: (r.underlyingAsset || r.asset || "").toLowerCase(),
-      symbol: r.symbol || "",
-      collateralAmount: r.collateralAmount || 0,
-      collateralUsd: r.collateralUsd || 0,
-      debtAmount: r.debtAmount || 0,
-      debtUsd: r.debtUsd || 0,
-      priceInUsd: r.priceInUsd || 0,
-    }));
   } catch (error) {
     console.error("Failed to fetch current position", error);
     return [];
