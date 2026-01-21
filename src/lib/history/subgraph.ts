@@ -328,10 +328,13 @@ async function fetchAaveEvents(
         schema.reserveField && raw[schema.reserveField]
           ? raw[schema.reserveField]
           : null;
-      const assetValue =
-        schema.assetField && raw[schema.assetField]
-          ? raw[schema.assetField]
-          : null;
+      // Always try to read asset field, even if schema doesn't detect it
+      let assetValue: unknown = null;
+      if (schema.assetField && raw[schema.assetField]) {
+        assetValue = raw[schema.assetField];
+      } else if (raw.asset && typeof raw.asset === "object") {
+        assetValue = raw.asset;
+      }
       const positionValue =
         schema.positionField && raw[schema.positionField]
           ? raw[schema.positionField]
@@ -937,12 +940,18 @@ function buildAaveSelection(schema: AaveSchemaConfig) {
   if (schema.fields.logIndex) fields.push(schema.fields.logIndex);
   if (schema.fields.blockNumber) fields.push(schema.fields.blockNumber);
   if (schema.fields.txHash) fields.push(schema.fields.txHash);
+  
+  // Always try to include asset field as fallback
+  let hasAssetField = false;
+  
   if (schema.assetField && schema.reserveField !== "asset") {
     fields.push("asset { id symbol decimals }");
+    hasAssetField = true;
   }
   if (schema.reserveField) {
     if (schema.reserveField === "asset") {
       fields.push("asset { id symbol decimals }");
+      hasAssetField = true;
       return fields.join("\n");
     }
     const reserveFields = [
@@ -989,6 +998,12 @@ function buildAaveSelection(schema: AaveSchemaConfig) {
       );
     }
   }
+  
+  // Always include asset as fallback if not already included
+  if (!hasAssetField && !fields.some(f => f.includes("asset {"))) {
+    fields.push("asset { id symbol decimals }");
+  }
+  
   return fields.join("\n");
 }
 
