@@ -275,9 +275,11 @@ function PnlCard({
                 </p>
               </div>
               <p className="text-xs text-muted-foreground">
-                {finalDebtPnl.pnl >= 0
+                {finalDebtPnl.pnl > 0
                   ? "Ganho: o empréstimo vale menos agora (moeda desvalorizou)"
-                  : "Perda: o empréstimo vale mais agora (moeda valorizou)"}
+                  : finalDebtPnl.pnl < 0
+                  ? "Perda: o empréstimo vale mais agora (moeda valorizou)"
+                  : "Sem P&L: o valor atual é igual ao valor emprestado"}
               </p>
             </>
           )}

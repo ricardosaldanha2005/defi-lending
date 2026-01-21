@@ -382,7 +382,9 @@ export async function GET(request: Request) {
     ? totalBorrowedUsd 
     : (historicalDebtCost > 0 ? historicalDebtCost : 0);
   
-  const debtPnl = currentDebtValue - borrowedUsd;
+  // P&L para dívida: se emprestaste $100 e agora deves $90, isso é um GANHO de $10
+  // P&L = Valor emprestado - Valor atual (positivo = ganho, negativo = perda)
+  const debtPnl = borrowedUsd - currentDebtValue;
 
   return NextResponse.json({
     walletId,
