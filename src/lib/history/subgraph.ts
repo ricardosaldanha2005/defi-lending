@@ -312,10 +312,16 @@ async function fetchAaveEvents(
         schema.reserveField && raw[schema.reserveField]
           ? ((raw[schema.reserveField] as Record<string, unknown>) ?? null)
           : null;
-      const nestedReserve =
-        reserve && schema.reserveNestedField && reserve[schema.reserveNestedField]
-          ? ((reserve[schema.reserveNestedField] as Record<string, unknown>) ?? null)
-          : null;
+      let nestedReserve: Record<string, unknown> | null = null;
+      if (reserve && schema.reserveNestedField && reserve[schema.reserveNestedField]) {
+        const nestedValue = reserve[schema.reserveNestedField];
+        if (Array.isArray(nestedValue)) {
+          nestedReserve =
+            (nestedValue[0] as Record<string, unknown> | undefined) ?? null;
+        } else {
+          nestedReserve = (nestedValue as Record<string, unknown>) ?? null;
+        }
+      }
         const txHashField = schema.fields.txHash;
         const txHash =
           (txHashField ? (raw[txHashField] as string | undefined) : undefined) ??
@@ -593,6 +599,8 @@ async function buildAaveConfigFromField(
       const reserveTypeFields = reserveTypeInfo.__type?.fields ?? [];
       reserveNestedField = pickField(reserveTypeFields, [
         "inputToken",
+        "inputTokens",
+        "outputToken",
         "asset",
         "token",
       ]);
