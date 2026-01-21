@@ -572,10 +572,10 @@ async function buildAaveConfigFromField(
     "amount_usd",
   ]);
   const reserveField = pickField(eventFields, [
-    "reserve",
     "asset",
-    "token",
     "market",
+    "reserve",
+    "token",
     "inputToken",
   ]);
   if (!timestampField) {
@@ -605,10 +605,10 @@ async function buildAaveConfigFromField(
       );
       const reserveTypeFields = reserveTypeInfo.__type?.fields ?? [];
       reserveNestedField = pickField(reserveTypeFields, [
+        "asset",
         "inputToken",
         "inputTokens",
         "outputToken",
-        "asset",
         "token",
       ]);
       if (reserveNestedField) {
