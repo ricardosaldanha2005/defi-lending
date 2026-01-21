@@ -597,8 +597,24 @@ async function buildAaveConfigFromField(
         "token",
       ]);
       if (reserveNestedField) {
+        const reserveTypeInfoDetailed = await postGraphQL<{
+          __type?: { fields?: Array<{ name: string; type: TypeRef }> };
+        }>(
+          url,
+          `
+            query ReserveTypeFields($name: String!) {
+              __type(name: $name) {
+                fields {
+                  name
+                  type { kind name ofType { kind name ofType { kind name } } }
+                }
+              }
+            }
+          `,
+          { name: reserveTypeName },
+        );
         const nestedTypeName = unwrapTypeName(
-          reserveTypeInfo.__type?.fields?.find(
+          reserveTypeInfoDetailed.__type?.fields?.find(
             (field) => field.name === reserveNestedField,
           )?.type,
         );
