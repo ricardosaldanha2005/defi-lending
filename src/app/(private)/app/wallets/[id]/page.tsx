@@ -221,14 +221,20 @@ function PnlCard({
   }
 
   // Se não temos debtPnl calculado, usar dados dos eventos ou aproximação
-  const finalDebtPnl = debtPnl || {
-    borrowedUsd:
-      data.totals.borrowUsd > 0
-        ? data.totals.borrowUsd - data.totals.repayUsd
-        : currentDebtValue, // Se não temos eventos, assumir que o custo = valor atual
-    currentValueUsd: currentDebtValue,
-    pnl: 0, // Não podemos calcular P&L sem custo histórico preciso
-  };
+  // IMPORTANTE: Sempre usar currentDebtValue (que prioriza currentDebtUsd) para o valor atual
+  const finalDebtPnl = debtPnl
+    ? {
+        ...debtPnl,
+        currentValueUsd: currentDebtValue, // Sempre usar o valor atual passado como prop
+      }
+    : {
+        borrowedUsd:
+          data.totals.borrowUsd > 0
+            ? data.totals.borrowUsd - data.totals.repayUsd
+            : currentDebtValue, // Se não temos eventos, assumir que o custo = valor atual
+        currentValueUsd: currentDebtValue, // Sempre usar o valor atual passado como prop
+        pnl: 0, // Não podemos calcular P&L sem custo histórico preciso
+      };
 
   return (
     <Card>
