@@ -84,6 +84,11 @@ type PnlData = {
   };
   netCollateralFlow: number;
   netDebtFlow: number;
+  debtPnl?: {
+    borrowedUsd: number; // Quanto emprestaste (custo histórico)
+    currentValueUsd: number; // Quanto vale agora
+    pnl: number; // P&L = Valor atual - Custo histórico
+  };
   markToMarket?: {
     pnl: number;
     currentCollateralValue: number;
@@ -107,7 +112,7 @@ function PnlCard({ walletId }: { walletId: string }) {
     return (
       <Card>
         <CardHeader>
-          <CardTitle>Histórico da Carteira</CardTitle>
+          <CardTitle>P&L do Empréstimo</CardTitle>
         </CardHeader>
         <CardContent>
           <p className="text-sm text-muted-foreground">A carregar...</p>
@@ -120,12 +125,12 @@ function PnlCard({ walletId }: { walletId: string }) {
     return (
       <Card>
         <CardHeader>
-          <CardTitle>Histórico da Carteira</CardTitle>
+          <CardTitle>P&L do Empréstimo</CardTitle>
         </CardHeader>
         <CardContent>
           <p className="text-sm text-muted-foreground">
             {error
-              ? "Erro ao carregar histórico. Sincroniza os eventos históricos primeiro."
+              ? "Erro ao carregar P&L. Sincroniza os eventos históricos primeiro."
               : "Nenhum dado disponível."}
           </p>
         </CardContent>
@@ -133,117 +138,58 @@ function PnlCard({ walletId }: { walletId: string }) {
     );
   }
 
-  const { totals, netCollateralFlow, netDebtFlow } = data;
+  const { debtPnl } = data;
 
-  // Calcular totais de entrada e saída
-  const totalEntradas = totals.supplyUsd + totals.borrowUsd;
-  const totalSaidas = totals.withdrawUsd + totals.repayUsd;
-  const saldoLiquido = totalEntradas - totalSaidas;
-
-  // Corrigir cálculos: netCollateralFlow vem invertido do backend (withdraw - supply)
-  // Queremos mostrar: depósitos - retiradas (o que ficou na carteira)
-  const collateralLiquido = totals.supplyUsd - totals.withdrawUsd;
-  // netDebtFlow está correto: borrow - repay (dívida atual)
-  const dividaLiquida = totals.borrowUsd - totals.repayUsd;
+  if (!debtPnl || debtPnl.currentValueUsd === 0) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>P&L do Empréstimo</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-sm text-muted-foreground">
+            Não tens empréstimos ativos.
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Histórico da Carteira</CardTitle>
+        <CardTitle>P&L do Empréstimo</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div className="space-y-2">
+        <div className="space-y-3">
           <div className="flex items-center justify-between">
-            <p className="text-sm text-muted-foreground">Saldo líquido</p>
+            <p className="text-sm text-muted-foreground">Quanto emprestaste (USD)</p>
+            <p className="text-lg font-semibold">
+              {formatUsd(debtPnl.borrowedUsd)}
+            </p>
+          </div>
+          <div className="flex items-center justify-between">
+            <p className="text-sm text-muted-foreground">Valor atual do empréstimo (USD)</p>
+            <p className="text-lg font-semibold">
+              {formatUsd(debtPnl.currentValueUsd)}
+            </p>
+          </div>
+          <Separator />
+          <div className="flex items-center justify-between">
+            <p className="text-sm font-medium">P&L</p>
             <p
-              className={`text-xl font-semibold ${
-                saldoLiquido >= 0 ? "text-green-600" : "text-red-600"
+              className={`text-2xl font-bold ${
+                debtPnl.pnl >= 0 ? "text-green-600" : "text-red-600"
               }`}
             >
-              {formatUsd(saldoLiquido)}
+              {formatUsd(debtPnl.pnl)}
             </p>
           </div>
           <p className="text-xs text-muted-foreground">
-            Total entradas: {formatUsd(totalEntradas)} - Total saídas:{" "}
-            {formatUsd(totalSaidas)}
+            {debtPnl.pnl >= 0
+              ? "Ganho: o empréstimo vale menos agora (moeda desvalorizou)"
+              : "Perda: o empréstimo vale mais agora (moeda valorizou)"}
           </p>
-        </div>
-
-        <Separator />
-
-        <div className="space-y-3">
-          <div>
-            <p className="text-sm font-medium mb-2">Colateral</p>
-            <div className="space-y-1 text-sm">
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Depósitos</span>
-                <span className="font-medium text-green-600">
-                  +{formatUsd(totals.supplyUsd)}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Retiradas</span>
-                <span className="font-medium text-red-600">
-                  -{formatUsd(totals.withdrawUsd)}
-                </span>
-              </div>
-              <div className="flex justify-between pt-1 border-t">
-                <span className="text-muted-foreground">Líquido</span>
-                <span
-                  className={`font-semibold ${
-                    collateralLiquido >= 0 ? "text-green-600" : "text-red-600"
-                  }`}
-                >
-                  {formatUsd(collateralLiquido)}
-                </span>
-              </div>
-            </div>
-          </div>
-
-          <Separator />
-
-          <div>
-            <p className="text-sm font-medium mb-2">Dívida</p>
-            <div className="space-y-1 text-sm">
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Empréstimos</span>
-                <span className="font-medium text-red-600">
-                  +{formatUsd(totals.borrowUsd)}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Pagamentos</span>
-                <span className="font-medium text-green-600">
-                  -{formatUsd(totals.repayUsd)}
-                </span>
-              </div>
-              <div className="flex justify-between pt-1 border-t">
-                <span className="text-muted-foreground">Líquido</span>
-                <span
-                  className={`font-semibold ${
-                    dividaLiquida >= 0 ? "text-red-600" : "text-green-600"
-                  }`}
-                >
-                  {formatUsd(dividaLiquida)}
-                </span>
-              </div>
-            </div>
-          </div>
-
-          {totals.liquidationUsd > 0 && (
-            <>
-              <Separator />
-              <div>
-                <p className="text-sm font-medium mb-2">Liquidações</p>
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Total liquidado</span>
-                  <span className="font-medium text-red-600">
-                    {formatUsd(totals.liquidationUsd)}
-                  </span>
-                </div>
-              </div>
-            </>
-          )}
         </div>
       </CardContent>
     </Card>

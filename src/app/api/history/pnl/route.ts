@@ -264,11 +264,19 @@ export async function GET(request: Request) {
     }
   }
 
+  // Calculate debt P&L: quanto emprestaste vs quanto vale agora
+  const debtPnl = currentDebtValue - historicalDebtCost;
+
   return NextResponse.json({
     walletId,
     totals,
     netCollateralFlow,
     netDebtFlow,
+    debtPnl: {
+      borrowedUsd: historicalDebtCost, // Quanto emprestaste (custo histórico)
+      currentValueUsd: currentDebtValue, // Quanto vale agora
+      pnl: debtPnl, // P&L = Valor atual - Custo histórico
+    },
     markToMarket: {
       pnl: markToMarketPnl,
       currentCollateralValue,
