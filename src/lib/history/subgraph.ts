@@ -74,7 +74,13 @@ type AaveSchemaConfig = {
   requiresWhere?: boolean;
   orderByField?: string;
   reserveField?: string;
+  reserveNestedField?: string;
   reserveFields?: {
+    symbol?: string;
+    underlyingAsset?: string;
+    decimals?: string;
+  };
+  reserveNestedFields?: {
     symbol?: string;
     underlyingAsset?: string;
     decimals?: string;
@@ -302,10 +308,14 @@ async function fetchAaveEvents(
       });
       const batch = data[schema.queryField] ?? [];
       for (const raw of batch) {
-        const reserve =
-          schema.reserveField && raw[schema.reserveField]
-            ? ((raw[schema.reserveField] as Record<string, unknown>) ?? null)
-            : null;
+      const reserve =
+        schema.reserveField && raw[schema.reserveField]
+          ? ((raw[schema.reserveField] as Record<string, unknown>) ?? null)
+          : null;
+      const nestedReserve =
+        reserve && schema.reserveNestedField && reserve[schema.reserveNestedField]
+          ? ((reserve[schema.reserveNestedField] as Record<string, unknown>) ?? null)
+          : null;
         const txHashField = schema.fields.txHash;
         const txHash =
           (txHashField ? (raw[txHashField] as string | undefined) : undefined) ??
@@ -324,13 +334,25 @@ async function fetchAaveEvents(
           eventType: schema.fields.action
             ? (raw[schema.fields.action] as string | undefined)
             : schema.fallbackEventType,
-          assetAddress: schema.reserveFields?.underlyingAsset
+        assetAddress: schema.reserveNestedFields?.underlyingAsset
+          ? (nestedReserve?.[
+              schema.reserveNestedFields.underlyingAsset
+            ] as string | undefined)
+          : schema.reserveFields?.underlyingAsset
             ? (reserve?.[schema.reserveFields.underlyingAsset] as string | undefined)
             : undefined,
-          assetSymbol: schema.reserveFields?.symbol
+        assetSymbol: schema.reserveNestedFields?.symbol
+          ? (nestedReserve?.[
+              schema.reserveNestedFields.symbol
+            ] as string | undefined)
+          : schema.reserveFields?.symbol
             ? (reserve?.[schema.reserveFields.symbol] as string | undefined)
             : undefined,
-          assetDecimals: schema.reserveFields?.decimals
+        assetDecimals: schema.reserveNestedFields?.decimals
+          ? (nestedReserve?.[
+              schema.reserveNestedFields.decimals
+            ] as number | string | undefined)
+          : schema.reserveFields?.decimals
             ? (reserve?.[schema.reserveFields.decimals] as number | string | undefined)
             : undefined,
           amountRaw: schema.fields.amount
@@ -536,12 +558,20 @@ async function buildAaveConfigFromField(
     "amountInUSD",
     "amount_usd",
   ]);
-  const reserveField = pickField(eventFields, ["reserve", "asset", "token"]);
+  const reserveField = pickField(eventFields, [
+    "reserve",
+    "asset",
+    "token",
+    "market",
+    "inputToken",
+  ]);
   if (!timestampField) {
     return null;
   }
 
   let reserveFields: AaveSchemaConfig["reserveFields"];
+  let reserveNestedField: string | undefined;
+  let reserveNestedFields: AaveSchemaConfig["reserveNestedFields"];
   if (reserveField) {
     const reserveTypeName = unwrapTypeName(
       eventFields.find((field) => field.name === reserveField)?.type,
@@ -561,6 +591,43 @@ async function buildAaveConfigFromField(
         { name: reserveTypeName },
       );
       const reserveTypeFields = reserveTypeInfo.__type?.fields ?? [];
+      reserveNestedField = pickField(reserveTypeFields, [
+        "inputToken",
+        "asset",
+        "token",
+      ]);
+      if (reserveNestedField) {
+        const nestedTypeName = unwrapTypeName(
+          reserveTypeInfo.__type?.fields?.find(
+            (field) => field.name === reserveNestedField,
+          )?.type,
+        );
+        if (nestedTypeName) {
+          const nestedTypeInfo = await postGraphQL<{
+            __type?: { fields?: Array<{ name: string }> };
+          }>(
+            url,
+            `
+              query ReserveNestedType($name: String!) {
+                __type(name: $name) {
+                  fields { name }
+                }
+              }
+            `,
+            { name: nestedTypeName },
+          );
+          const nestedFields = nestedTypeInfo.__type?.fields ?? [];
+          reserveNestedFields = {
+            symbol: pickField(nestedFields, ["symbol", "name"]),
+            underlyingAsset: pickField(nestedFields, [
+              "id",
+              "tokenAddress",
+              "address",
+            ]),
+            decimals: pickField(nestedFields, ["decimals"]),
+          };
+        }
+      }
       reserveFields = {
         symbol: pickField(reserveTypeFields, ["symbol", "name"]),
         underlyingAsset: pickField(reserveTypeFields, [
@@ -637,7 +704,9 @@ async function buildAaveConfigFromField(
     requiresWhere: requiredArgs.includes("where"),
     orderByField: timestampField,
     reserveField,
+    reserveNestedField,
     reserveFields,
+    reserveNestedFields,
     fallbackEventType: queryField.name,
   };
 }
@@ -658,7 +727,18 @@ function buildAaveSelection(schema: AaveSchemaConfig) {
       schema.reserveFields?.underlyingAsset,
       schema.reserveFields?.decimals,
     ].filter(Boolean);
-    if (reserveFields.length > 0) {
+    if (schema.reserveNestedField && schema.reserveNestedFields) {
+      const nestedFields = [
+        schema.reserveNestedFields.symbol,
+        schema.reserveNestedFields.underlyingAsset,
+        schema.reserveNestedFields.decimals,
+      ].filter(Boolean);
+      if (nestedFields.length > 0) {
+        fields.push(
+          `${schema.reserveField} { ${schema.reserveNestedField} { ${nestedFields.join(" ")} } }`,
+        );
+      }
+    } else if (reserveFields.length > 0) {
       fields.push(
         `${schema.reserveField} { ${reserveFields.join(" ")} }`,
       );
