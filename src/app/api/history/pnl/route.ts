@@ -320,11 +320,17 @@ export async function GET(request: Request) {
   const netDebtFlow = totals.borrowUsd - totals.repayUsd;
 
   // Fetch current position for mark-to-market
-  const currentPositions = await fetchCurrentPosition(
-    wallet.address,
-    wallet.chain,
-    wallet.protocol as Protocol,
-  );
+  let currentPositions: AssetPosition[] = [];
+  try {
+    currentPositions = await fetchCurrentPosition(
+      wallet.address,
+      wallet.chain,
+      wallet.protocol as Protocol,
+    );
+  } catch (error) {
+    console.error("Failed to fetch current position:", error);
+    // Continue with empty positions - P&L will be calculated from historical data only
+  }
 
   // Calculate mark-to-market P&L
   let markToMarketPnl = 0;
@@ -384,26 +390,46 @@ export async function GET(request: Request) {
   
   // P&L para dívida: se emprestaste $100 e agora deves $90, isso é um GANHO de $10
   // P&L = Valor emprestado - Valor atual (positivo = ganho, negativo = perda)
-  const debtPnl = borrowedUsd - currentDebtValue;
+  // Ensure all values are numbers (not NaN or undefined)
+  const safeBorrowedUsd = Number.isFinite(borrowedUsd) ? borrowedUsd : 0;
+  const safeCurrentDebtValue = Number.isFinite(currentDebtValue) ? currentDebtValue : 0;
+  const debtPnl = safeBorrowedUsd - safeCurrentDebtValue;
+
+  // Ensure all return values are finite numbers
+  const safeTotals = {
+    supplyUsd: Number.isFinite(totals.supplyUsd) ? totals.supplyUsd : 0,
+    withdrawUsd: Number.isFinite(totals.withdrawUsd) ? totals.withdrawUsd : 0,
+    borrowUsd: Number.isFinite(totals.borrowUsd) ? totals.borrowUsd : 0,
+    repayUsd: Number.isFinite(totals.repayUsd) ? totals.repayUsd : 0,
+    liquidationUsd: Number.isFinite(totals.liquidationUsd) ? totals.liquidationUsd : 0,
+    otherUsd: Number.isFinite(totals.otherUsd) ? totals.otherUsd : 0,
+  };
+
+  const safeNetCollateralFlow = Number.isFinite(netCollateralFlow) ? netCollateralFlow : 0;
+  const safeNetDebtFlow = Number.isFinite(netDebtFlow) ? netDebtFlow : 0;
+  const safeMarkToMarketPnl = Number.isFinite(markToMarketPnl) ? markToMarketPnl : 0;
+  const safeCurrentCollateralValue = Number.isFinite(currentCollateralValue) ? currentCollateralValue : 0;
+  const safeHistoricalCollateralCost = Number.isFinite(historicalCollateralCost) ? historicalCollateralCost : 0;
+  const safeHistoricalDebtCost = Number.isFinite(historicalDebtCost) ? historicalDebtCost : 0;
 
   return NextResponse.json({
     walletId,
-    totals,
-    netCollateralFlow,
-    netDebtFlow,
+    totals: safeTotals,
+    netCollateralFlow: safeNetCollateralFlow,
+    netDebtFlow: safeNetDebtFlow,
     debtPnl: {
-      borrowedUsd: borrowedUsd, // Quanto emprestaste (total líquido em USD histórico, ou custo médio ponderado como fallback)
-      currentValueUsd: currentDebtValue, // Quanto vale agora
-      pnl: debtPnl, // P&L = Valor atual - Custo histórico
+      borrowedUsd: safeBorrowedUsd, // Quanto emprestaste (total líquido em USD histórico, ou custo médio ponderado como fallback)
+      currentValueUsd: safeCurrentDebtValue, // Quanto vale agora
+      pnl: debtPnl, // P&L = Valor emprestado - Valor atual
     },
     markToMarket: {
-      pnl: markToMarketPnl,
-      currentCollateralValue,
-      currentDebtValue,
-      historicalCollateralCost,
-      historicalDebtCost,
-      netPositionValue: currentCollateralValue - currentDebtValue,
-      netHistoricalCost: historicalCollateralCost - historicalDebtCost,
+      pnl: safeMarkToMarketPnl,
+      currentCollateralValue: safeCurrentCollateralValue,
+      currentDebtValue: safeCurrentDebtValue,
+      historicalCollateralCost: safeHistoricalCollateralCost,
+      historicalDebtCost: safeHistoricalDebtCost,
+      netPositionValue: safeCurrentCollateralValue - safeCurrentDebtValue,
+      netHistoricalCost: safeHistoricalCollateralCost - safeHistoricalDebtCost,
     },
   });
 }
