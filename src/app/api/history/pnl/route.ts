@@ -433,4 +433,14 @@ export async function GET(request: Request) {
       netHistoricalCost: safeHistoricalCollateralCost - safeHistoricalDebtCost,
     },
   });
+  } catch (error) {
+    console.error("Error in P&L calculation:", error);
+    return NextResponse.json(
+      { 
+        error: "Failed to calculate P&L",
+        detail: error instanceof Error ? error.message : String(error)
+      },
+      { status: 500 }
+    );
+  }
 }
