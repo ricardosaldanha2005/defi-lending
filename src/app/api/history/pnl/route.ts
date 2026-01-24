@@ -177,20 +177,21 @@ async function fetchCurrentPosition(
 }
 
 export async function GET(request: Request) {
-  const supabase = await createSupabaseServerClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  try {
+    const supabase = await createSupabaseServerClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
 
-  if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
 
-  const { searchParams } = new URL(request.url);
-  const walletId = searchParams.get("walletId");
-  if (!walletId) {
-    return NextResponse.json({ error: "walletId required" }, { status: 400 });
-  }
+    const { searchParams } = new URL(request.url);
+    const walletId = searchParams.get("walletId");
+    if (!walletId) {
+      return NextResponse.json({ error: "walletId required" }, { status: 400 });
+    }
 
   // Fetch wallet info
   const { data: wallet, error: walletError } = await supabase
