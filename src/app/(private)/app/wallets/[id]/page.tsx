@@ -388,28 +388,32 @@ function HistoryEventsTab({
   }
   // #endregion
 
-  // Só eventos de borrow/repay para esta aba (movimentos do empréstimo)
-  const borrowRelatedEvents = useMemo(() => {
-    return allEvents.filter((e) => {
-      const key = e.event_type.toLowerCase();
-      return key.includes("borrow") || key.includes("repay");
-    });
-  }, [allEvents]);
+  // Base: todos os eventos ou só borrow/repay conforme filtro
+  const baseEvents = useMemo(
+    () =>
+      eventTypeFilter === "all_types"
+        ? allEvents
+        : allEvents.filter((e) => {
+            const key = (e.event_type ?? "").toLowerCase();
+            return key.includes("borrow") || key.includes("repay");
+          }),
+    [allEvents, eventTypeFilter],
+  );
 
-  // Assets que aparecem nos movimentos de borrow
+  // Assets que aparecem nos eventos (todos os tipos para o dropdown)
   const assets = useMemo(() => {
     const assetSet = new Set<string>();
-    borrowRelatedEvents.forEach((e) => {
+    allEvents.forEach((e) => {
       if (e.asset_symbol) assetSet.add(e.asset_symbol);
     });
     return Array.from(assetSet).sort();
-  }, [borrowRelatedEvents]);
+  }, [allEvents]);
 
-  // Filtro: por defeito só borrow (entradas e saídas); opcionalmente só borrow ou só repay
+  // Filtro por tipo (dentro de base) e por asset
   const events = useMemo(() => {
-    return borrowRelatedEvents.filter((e) => {
-      if (eventTypeFilter === "all") return true;
-      const key = e.event_type.toLowerCase();
+    return baseEvents.filter((e) => {
+      if (eventTypeFilter === "all_types") return true;
+      const key = (e.event_type ?? "").toLowerCase();
       if (eventTypeFilter === "borrow_only")
         return key.includes("borrow") || key.includes("repay");
       if (eventTypeFilter === "borrow") return key.includes("borrow");
@@ -417,7 +421,7 @@ function HistoryEventsTab({
       if (assetFilter !== "all" && e.asset_symbol !== assetFilter) return false;
       return true;
     }).filter((e) => assetFilter === "all" || e.asset_symbol === assetFilter);
-  }, [borrowRelatedEvents, eventTypeFilter, assetFilter]);
+  }, [baseEvents, eventTypeFilter, assetFilter]);
 
   const getEventTypeLabel = (type: string) => {
     const key = type.toLowerCase();
@@ -459,15 +463,15 @@ function HistoryEventsTab({
     );
   }
 
-  if (borrowRelatedEvents.length === 0) {
+  if (allEvents.length === 0) {
     return (
       <Card>
         <CardHeader>
-          <CardTitle>Movimentos de borrow</CardTitle>
+          <CardTitle>Movimentos</CardTitle>
         </CardHeader>
         <CardContent className="py-8 space-y-4 text-center">
           <p className="text-sm text-muted-foreground">
-            Nenhum movimento de borrow/repay encontrado. Sincroniza os eventos históricos para esta carteira.
+            Nenhum evento encontrado. Sincroniza os eventos históricos para esta carteira.
           </p>
           <Button
             onClick={runSync}
@@ -483,10 +487,55 @@ function HistoryEventsTab({
     );
   }
 
+  if (events.length === 0) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Movimentos</CardTitle>
+        </CardHeader>
+        <CardContent className="py-8 space-y-4 text-center">
+          <p className="text-sm text-muted-foreground">
+            Nenhum movimento de borrow/repay para o filtro selecionado.
+          </p>
+          <p className="text-sm text-muted-foreground">
+            <Button
+              variant="link"
+              className="p-0 h-auto text-primary"
+              onClick={() => setEventTypeFilter("all_types")}
+            >
+              Mostrar todos os tipos
+            </Button>
+          </p>
+          <div className="flex gap-4 items-end justify-center flex-wrap">
+            <div className="flex-1 min-w-[200px]">
+              <Label htmlFor="event-type-filter">Tipo</Label>
+              <Select
+                value={eventTypeFilter}
+                onValueChange={setEventTypeFilter}
+              >
+                <SelectTrigger id="event-type-filter">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all_types">Todos os tipos</SelectItem>
+                  <SelectItem value="borrow_only">Borrow + repay</SelectItem>
+                  <SelectItem value="borrow">Só borrow</SelectItem>
+                  <SelectItem value="repay">Só repay</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Movimentos de borrow ({events.length})</CardTitle>
+        <CardTitle>
+          {eventTypeFilter === "all_types" ? "Movimentos" : "Movimentos de borrow"} ({events.length})
+        </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="flex gap-4 items-end">
@@ -500,6 +549,7 @@ function HistoryEventsTab({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
+                <SelectItem value="all_types">Todos os tipos</SelectItem>
                 <SelectItem value="borrow_only">Entradas e saídas (borrow + repay)</SelectItem>
                 <SelectItem value="borrow">Só entradas (borrow)</SelectItem>
                 <SelectItem value="repay">Só saídas (repay)</SelectItem>

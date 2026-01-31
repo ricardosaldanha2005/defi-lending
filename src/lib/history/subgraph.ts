@@ -245,9 +245,16 @@ function normalizeEvent(params: {
   const txHash = params.txHash ?? "";
   if (!txHash) return null;
   const logIndex = Number(params.logIndex ?? 0);
-  const timestamp = Number(params.timestamp ?? 0);
-  if (!Number.isFinite(timestamp) || timestamp <= 0) return null;
   const blockNumber = Number(params.blockNumber ?? 0);
+  let timestamp = Number(params.timestamp ?? 0);
+  // Subgraphs como Compound PositionAccounting podem só ter blockNumber (lastUpdatedBlockNumber)
+  if (!Number.isFinite(timestamp) || timestamp <= 0) {
+    if (Number.isFinite(blockNumber) && blockNumber > 0) {
+      timestamp = blockNumber * 12; // ~12s por block para ordenação
+    } else {
+      return null;
+    }
+  }
   const assetDecimals =
     params.assetDecimals !== undefined && params.assetDecimals !== null
       ? Number(params.assetDecimals)
