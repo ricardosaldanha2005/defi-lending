@@ -1335,18 +1335,33 @@ async function resolveCompoundSchemaConfig(
     );
   }
 
-  const eventTypeName = unwrapTypeName(queryField.type);
+  let eventTypeName = unwrapTypeName(queryField.type);
   if (!eventTypeName) {
-    throw new Error("Compound subgraph event type not found.");
+    eventTypeName = deriveEntityTypeName(queryField.name);
+  }
+  if (!eventTypeName) {
+    const typeStr = queryField.type
+      ? JSON.stringify({
+          kind: queryField.type.kind,
+          name: queryField.type.name,
+          ofType: queryField.type.ofType
+            ? { kind: queryField.type.ofType.kind, name: queryField.type.ofType.name }
+            : null,
+        })
+      : "null";
+    throw new Error(
+      `Compound subgraph: tipo do campo "${queryField.name}" não resolvido. type=${typeStr}`,
+    );
   }
 
   const eventTypeInfo = await postGraphQL<{
-    __type?: { fields?: Array<{ name: string; type: TypeRef }> };
+    __type?: { name?: string; fields?: Array<{ name: string; type: TypeRef }> };
   }>(
     url,
     `
       query EventType($name: String!) {
         __type(name: $name) {
+          name
           fields {
             name
             type { kind name ofType { kind name ofType { kind name } } }
@@ -1357,7 +1372,58 @@ async function resolveCompoundSchemaConfig(
     { name: eventTypeName },
   );
 
-  const eventFields = eventTypeInfo.__type?.fields ?? [];
+  let resolvedType = eventTypeInfo.__type;
+  const triedNames = [eventTypeName];
+  if (!resolvedType) {
+    const alternatives = [
+      eventTypeName.charAt(0).toLowerCase() + eventTypeName.slice(1),
+      queryField.name.charAt(0).toUpperCase() + queryField.name.slice(1),
+    ].filter((n) => n && !triedNames.includes(n));
+    for (const alt of alternatives) {
+      triedNames.push(alt);
+      const altInfo = await postGraphQL<{
+        __type?: { name?: string; fields?: Array<{ name: string; type: TypeRef }> };
+      }>(
+        url,
+        `
+          query EventType($name: String!) {
+            __type(name: $name) {
+              name
+              fields {
+                name
+                type { kind name ofType { kind name ofType { kind name } } }
+              }
+            }
+          }
+        `,
+        { name: alt },
+      );
+      if (altInfo.__type?.fields?.length) {
+        resolvedType = altInfo.__type;
+        eventTypeName = altInfo.__type.name ?? alt;
+        break;
+      }
+    }
+  }
+  if (!resolvedType) {
+    const typesData = await postGraphQL<{
+      __schema?: { types?: Array<{ name: string }> };
+    }>(
+      url,
+      `query SchemaTypes { __schema { types { name } } }`,
+      {},
+    ).catch(() => ({ __schema: null }));
+    const available = (typesData.__schema?.types ?? [])
+      .filter((t) => !t.name.startsWith("__"))
+      .map((t) => t.name)
+      .slice(0, 30)
+      .join(", ");
+    throw new Error(
+      `Compound subgraph: event type not found. Tried: ${triedNames.join(", ")}. Query field: "${queryField.name}". Available types (ex.): ${available || "—"}`,
+    );
+  }
+
+  const eventFields = resolvedType.fields ?? [];
   const timestampField = pickField(eventFields, [
     "timestamp",
     "blockTimestamp",
