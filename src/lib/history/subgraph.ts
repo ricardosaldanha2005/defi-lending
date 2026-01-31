@@ -678,18 +678,29 @@ async function resolveAaveSchemaConfig(url: string): Promise<AaveSchemaConfig[]>
     fallbackNames.includes(field.name),
   );
   if (fallbackFields.length > 0) {
-    return fallbackFields.map((field) => ({
-      queryField: field.name,
-      eventTypeName: field.name,
-      fields: {
-        id: "id",
-        timestamp: "timestamp",
-        amount: "amount",
-        amountUsd: "amountUSD",
-      },
-      orderByField: "timestamp",
-      fallbackEventType: field.name,
-    }));
+    const fallbackConfigs: AaveSchemaConfig[] = [];
+    for (const field of fallbackFields) {
+      const config: AaveSchemaConfig = {
+        queryField: field.name,
+        eventTypeName: field.name,
+        fields: {
+          id: "id",
+          timestamp: "timestamp",
+          amount: "amount",
+          amountUsd: "amountUSD",
+        },
+        orderByField: "timestamp",
+        fallbackEventType: field.name,
+      };
+      if (field.name === "borrows" || field.name === "repays") {
+        const whereUserField = await getWhereUserFieldForField(url, field);
+        if (!whereUserField) continue;
+        config.whereUserField = whereUserField;
+        config.requiresWhere = true;
+      }
+      fallbackConfigs.push(config);
+    }
+    if (fallbackConfigs.length > 0) return fallbackConfigs;
   }
 
   throw new Error(
@@ -733,8 +744,10 @@ async function buildAaveConfigFromField(
   );
 
   const eventFields = eventTypeInfo.__type?.fields ?? [];
+  const isBorrowOrRepay =
+    queryField.name === "borrows" || queryField.name === "repays";
   if (eventFields.length === 0) {
-    return {
+    const base = {
       queryField: queryField.name,
       eventTypeName,
       fields: {
@@ -750,6 +763,12 @@ async function buildAaveConfigFromField(
       orderByField: "timestamp",
       fallbackEventType: queryField.name,
     };
+    if (isBorrowOrRepay) {
+      const whereUserField = await getWhereUserFieldForField(url, queryField);
+      if (!whereUserField) return null;
+      return { ...base, whereUserField, requiresWhere: true };
+    }
+    return base;
   }
   const timestampField = pickField(eventFields, [
     "timestamp",
