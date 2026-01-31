@@ -125,6 +125,26 @@ function normalizeChain(chain: string) {
   return (chain ?? "").toLowerCase().replace(/^arbitrum-one$/i, "arbitrum");
 }
 
+// Aproximação block number -> Unix timestamp por chain (genesis + blockTime)
+const CHAIN_GENESIS_BLOCK_TIME: Record<
+  string,
+  { genesis: number; blockTime: number }
+> = {
+  base: { genesis: 1691539200, blockTime: 2 }, // Base mainnet ~Aug 2023
+  arbitrum: { genesis: 1630368000, blockTime: 1 }, // Arbitrum One ~Aug 2021
+  polygon: { genesis: 1590796800, blockTime: 2 }, // Polygon ~May 2020
+};
+
+function blockNumberToApproxTimestamp(
+  chain: string,
+  blockNumber: number,
+): number {
+  const norm = normalizeChain(chain);
+  const cfg = CHAIN_GENESIS_BLOCK_TIME[norm];
+  if (!cfg) return blockNumber * 12; // fallback antigo
+  return Math.round(cfg.genesis + blockNumber * cfg.blockTime);
+}
+
 function getSubgraphUrl(protocol: Protocol, chain: string) {
   const chainNorm = normalizeChain(chain);
   const parsed =
@@ -230,18 +250,21 @@ function normalizeAmount(
   }
 }
 
-function normalizeEvent(params: {
-  txHash?: string;
-  logIndex?: number | string;
-  blockNumber?: number | string;
-  timestamp?: number | string;
-  eventType?: string;
-  assetAddress?: string | null;
-  assetSymbol?: string | null;
-  assetDecimals?: number | string | null;
-  amountRaw?: string | null;
-  amountUsdRaw?: string | null;
-}): NormalizedEvent | null {
+function normalizeEvent(
+  params: {
+    txHash?: string;
+    logIndex?: number | string;
+    blockNumber?: number | string;
+    timestamp?: number | string;
+    eventType?: string;
+    assetAddress?: string | null;
+    assetSymbol?: string | null;
+    assetDecimals?: number | string | null;
+    amountRaw?: string | null;
+    amountUsdRaw?: string | null;
+  },
+  chain?: string,
+): NormalizedEvent | null {
   const txHash = params.txHash ?? "";
   if (!txHash) return null;
   const logIndex = Number(params.logIndex ?? 0);
@@ -250,7 +273,9 @@ function normalizeEvent(params: {
   // Subgraphs como Compound PositionAccounting podem só ter blockNumber (lastUpdatedBlockNumber)
   if (!Number.isFinite(timestamp) || timestamp <= 0) {
     if (Number.isFinite(blockNumber) && blockNumber > 0) {
-      timestamp = blockNumber * 12; // ~12s por block para ordenação
+      timestamp = chain
+        ? blockNumberToApproxTimestamp(chain, blockNumber)
+        : blockNumber * 12;
     } else {
       return null;
     }
@@ -302,7 +327,13 @@ export async function fetchSubgraphEvents({
   const lowerAddress = address.toLowerCase();
 
   if (protocol === "compound") {
-    return fetchCompoundEvents(url, lowerAddress, fromTimestamp, maxEvents);
+    return fetchCompoundEvents(
+      url,
+      lowerAddress,
+      fromTimestamp,
+      maxEvents,
+      chain,
+    );
   }
   return fetchAaveEvents(url, lowerAddress, fromTimestamp, maxEvents);
 }
@@ -1192,6 +1223,7 @@ async function fetchCompoundEvents(
   address: string,
   fromTimestamp: number,
   maxEvents?: number,
+  chain?: string,
 ) {
   const schema = await getCompoundSchemaConfig(url);
   const selection = buildCompoundSelection(schema);
@@ -1273,7 +1305,7 @@ async function fetchCompoundEvents(
         amountUsdRaw: schema.fields.amountUsd
           ? (raw[schema.fields.amountUsd] as string | undefined)
           : undefined,
-      });
+      }, chain);
       if (normalized) events.push(normalized);
       if (limit && events.length >= limit) {
         return events.slice(0, limit);
