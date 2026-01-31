@@ -314,6 +314,31 @@ function HistoryEventsTab({
 
   const allEvents = data?.events || [];
 
+  // #region agent log
+  const borrowRelatedEventsForLog = allEvents.filter((e) => {
+    const key = (e.event_type || "").toLowerCase();
+    return key.includes("borrow") || key.includes("repay");
+  });
+  if (allEvents.length >= 0) {
+    fetch("http://127.0.0.1:7242/ingest/f851284a-e320-4111-a6b3-990427dc7984", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        location: "wallets/[id]/page.tsx:HistoryEventsTab",
+        message: "Frontend events filter",
+        data: {
+          allCount: allEvents.length,
+          borrowRelatedCount: borrowRelatedEventsForLog.length,
+          eventTypesSample: allEvents.slice(0, 10).map((e) => e.event_type),
+        },
+        timestamp: Date.now(),
+        sessionId: "debug-session",
+        hypothesisId: "C",
+      }),
+    }).catch(() => {});
+  }
+  // #endregion
+
   // Só eventos de borrow/repay para esta aba (movimentos do empréstimo)
   const borrowRelatedEvents = useMemo(() => {
     return allEvents.filter((e) => {

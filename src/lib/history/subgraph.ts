@@ -271,8 +271,44 @@ async function fetchAaveEvents(
 ) {
   const events: NormalizedEvent[] = [];
   const limit = maxEvents && maxEvents > 0 ? maxEvents : null;
-  const schemas = await getAaveSchemaConfig(url);
+  let schemas = await getAaveSchemaConfig(url);
+  // Priorizar borrow/repay para a aba Histórico ter movimentos de empréstimo
+  const borrowFirst = (a: { queryField: string }, b: { queryField: string }) => {
+    const want = (q: string) => q.toLowerCase().includes("borrow") || q.toLowerCase().includes("repay");
+    if (want(a.queryField) && !want(b.queryField)) return -1;
+    if (!want(a.queryField) && want(b.queryField)) return 1;
+    return 0;
+  };
+  schemas = [...schemas].sort(borrowFirst);
+  // #region agent log
+  fetch("http://127.0.0.1:7242/ingest/f851284a-e320-4111-a6b3-990427dc7984", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      location: "subgraph.ts:fetchAaveEvents",
+      message: "Aave schema order",
+      data: { schemaOrder: schemas.map((s) => s.queryField), limit },
+      timestamp: Date.now(),
+      sessionId: "debug-session",
+      hypothesisId: "A",
+    }),
+  }).catch(() => {});
+  // #endregion
   for (const schema of schemas) {
+    // #region agent log
+    fetch("http://127.0.0.1:7242/ingest/f851284a-e320-4111-a6b3-990427dc7984", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        location: "subgraph.ts:fetchAaveEvents:loop",
+        message: "Processing schema",
+        data: { queryField: schema.queryField, eventsSoFar: events.length },
+        timestamp: Date.now(),
+        sessionId: "debug-session",
+        hypothesisId: "A",
+      }),
+    }).catch(() => {});
+    // #endregion
     const selection = buildAaveSelection(schema);
     const whereEntries: string[] = [];
     if (schema.whereUserField) {
@@ -464,6 +500,20 @@ async function fetchAaveEvents(
         });
         if (normalized) events.push(normalized);
         if (limit && events.length >= limit) {
+          // #region agent log
+          fetch("http://127.0.0.1:7242/ingest/f851284a-e320-4111-a6b3-990427dc7984", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              location: "subgraph.ts:fetchAaveEvents:limit",
+              message: "Limit reached, returning early",
+              data: { queryField: schema.queryField, totalEvents: events.length },
+              timestamp: Date.now(),
+              sessionId: "debug-session",
+              hypothesisId: "A",
+            }),
+          }).catch(() => {});
+          // #endregion
           return events.slice(0, limit);
         }
       }

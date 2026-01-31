@@ -48,5 +48,21 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Failed to load events" }, { status: 500 });
   }
 
-  return NextResponse.json({ events: data ?? [] });
+  const events = data ?? [];
+  // #region agent log
+  const eventTypes = [...new Set((events as { event_type?: string }[]).map((e) => e.event_type))];
+  fetch("http://127.0.0.1:7242/ingest/f851284a-e320-4111-a6b3-990427dc7984", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      location: "api/history/events/route.ts:GET",
+      message: "Events returned",
+      data: { walletId, count: events.length, eventTypes },
+      timestamp: Date.now(),
+      sessionId: "debug-session",
+      hypothesisId: "B",
+    }),
+  }).catch(() => {});
+  // #endregion
+  return NextResponse.json({ events });
 }
