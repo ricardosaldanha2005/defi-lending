@@ -221,21 +221,15 @@ function PnlCard({
     );
   }
 
-  // Se não temos debtPnl calculado, usar dados dos eventos ou aproximação
-  // IMPORTANTE: Sempre usar currentDebtValue (que prioriza currentDebtUsd) para o valor atual
-  const finalDebtPnl = debtPnl
-    ? {
-        ...debtPnl,
-        currentValueUsd: currentDebtValue, // Sempre usar o valor atual passado como prop
-      }
-    : {
-        borrowedUsd:
-          data.totals.borrowUsd > 0
-            ? data.totals.borrowUsd - data.totals.repayUsd
-            : currentDebtValue, // Se não temos eventos, assumir que o custo = valor atual
-        currentValueUsd: currentDebtValue, // Sempre usar o valor atual passado como prop
-        pnl: 0, // Não podemos calcular P&L sem custo histórico preciso
-      };
+  // Sempre usar currentDebtValue (da prop) para o valor atual; recalcular P&L para ser consistente
+  const borrowedUsd =
+    debtPnl?.borrowedUsd ??
+    (data.totals.borrowUsd > 0 ? data.totals.borrowUsd - data.totals.repayUsd : currentDebtValue);
+  const finalDebtPnl = {
+    borrowedUsd,
+    currentValueUsd: currentDebtValue,
+    pnl: borrowedUsd - currentDebtValue, // P&L = valor emprestado - valor atual (positivo = ganho)
+  };
 
   return (
     <Card>
@@ -262,28 +256,26 @@ function PnlCard({
               Debug: currentDebtUsd={currentDebtUsd?.toFixed(2)}, currentDebtValue={currentDebtValue.toFixed(2)}, borrowedUsd={finalDebtPnl.borrowedUsd.toFixed(2)}
             </div>
           )}
-          {finalDebtPnl.pnl !== 0 && (
-            <>
-              <Separator />
-              <div className="flex items-center justify-between">
-                <p className="text-sm font-medium">P&L</p>
-                <p
-                  className={`text-2xl font-bold ${
-                    finalDebtPnl.pnl >= 0 ? "text-green-600" : "text-red-600"
-                  }`}
-                >
-                  {formatUsd(finalDebtPnl.pnl)}
-                </p>
-              </div>
-              <p className="text-xs text-muted-foreground">
-                {finalDebtPnl.pnl > 0
-                  ? "Ganho: o empréstimo vale menos agora (moeda desvalorizou)"
-                  : finalDebtPnl.pnl < 0
-                  ? "Perda: o empréstimo vale mais agora (moeda valorizou)"
-                  : "Sem P&L: o valor atual é igual ao valor emprestado"}
+          <>
+            <Separator />
+            <div className="flex items-center justify-between">
+              <p className="text-sm font-medium">P&L</p>
+              <p
+                className={`text-2xl font-bold ${
+                  finalDebtPnl.pnl >= 0 ? "text-green-600" : "text-red-600"
+                }`}
+              >
+                {formatUsd(finalDebtPnl.pnl)}
               </p>
-            </>
-          )}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {finalDebtPnl.pnl > 0
+                ? "Ganho: o empréstimo vale menos agora (moeda desvalorizou)"
+                : finalDebtPnl.pnl < 0
+                ? "Perda: o empréstimo vale mais agora (moeda valorizou)"
+                : "Sem P&L: o valor atual é igual ao valor emprestado"}
+            </p>
+          </>
           {debtPnl?.perAsset && debtPnl.perAsset.length > 0 && (
             <>
               <Separator />
