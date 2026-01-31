@@ -69,9 +69,30 @@ type HistoryEvent = {
   amount: number | null;
   amount_usd: number | null;
   block_timestamp: string;
+  block_number?: number | null;
   tx_hash: string;
   log_index?: number;
 };
+
+// Corrige datas antigas (1970–1972) quando block_timestamp veio de blockNumber*12
+function getEventDisplayDate(
+  event: HistoryEvent,
+  chain?: string,
+): Date {
+  const stored = new Date(event.block_timestamp);
+  const year = stored.getUTCFullYear();
+  if (year >= 1970 && year <= 1972 && event.block_number != null && event.block_number > 0 && chain) {
+    const norm = chain.toLowerCase().replace(/^arbitrum-one$/i, "arbitrum");
+    const cfg: Record<string, { genesis: number; blockTime: number }> = {
+      base: { genesis: 1691539200, blockTime: 2 },
+      arbitrum: { genesis: 1630368000, blockTime: 1 },
+      polygon: { genesis: 1590796800, blockTime: 2 },
+    };
+    const c = cfg[norm];
+    if (c) return new Date((c.genesis + event.block_number * c.blockTime) * 1000);
+  }
+  return stored;
+}
 
 type PnlData = {
   walletId: string;
@@ -589,7 +610,7 @@ function HistoryEventsTab({
               {events.map((event) => (
                 <TableRow key={event.id ?? `${event.tx_hash ?? ""}-${event.log_index ?? ""}`}>
                   <TableCell className="text-sm">
-                    {new Date(event.block_timestamp).toLocaleDateString("pt-PT", {
+                    {getEventDisplayDate(event, chain).toLocaleDateString("pt-PT", {
                       year: "numeric",
                       month: "short",
                       day: "numeric",
