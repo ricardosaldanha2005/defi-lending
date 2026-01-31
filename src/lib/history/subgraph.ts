@@ -1404,8 +1404,18 @@ async function resolveCompoundSchemaConfig(
     }
 
     const ef = resolved.fields ?? [];
-    const tsF = pickField(ef, ["timestamp", "blockTimestamp", "block_timestamp"]);
-    const blockF = pickField(ef, ["blockNumber", "block_number"]);
+    const tsF = pickField(ef, [
+      "timestamp",
+      "blockTimestamp",
+      "block_timestamp",
+      "lastAccrualTime",
+    ]);
+    const blockF = pickField(ef, [
+      "blockNumber",
+      "block_number",
+      "lastUpdatedBlockNumber",
+      "lastAccountingUpdatedBlockNumber",
+    ]);
     const orderBy = tsF ?? blockF;
 
     if (!orderBy) {
@@ -1437,6 +1447,7 @@ async function resolveCompoundSchemaConfig(
     "timestamp",
     "blockTimestamp",
     "block_timestamp",
+    "lastAccrualTime",
   ]);
   const txHashField = pickField(eventFields, [
     "transactionHash",
@@ -1444,7 +1455,12 @@ async function resolveCompoundSchemaConfig(
     "hash",
   ]);
   const logIndexField = pickField(eventFields, ["logIndex", "log_index"]);
-  const blockNumberField = pickField(eventFields, ["blockNumber", "block_number"]);
+  const blockNumberField = pickField(eventFields, [
+    "blockNumber",
+    "block_number",
+    "lastUpdatedBlockNumber",
+    "lastAccountingUpdatedBlockNumber",
+  ]);
   const eventTypeField = pickField(eventFields, ["eventType", "type", "action"]);
   const amountField = pickField(eventFields, [
     "amount",
