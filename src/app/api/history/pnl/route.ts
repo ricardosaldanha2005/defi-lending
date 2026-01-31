@@ -251,6 +251,11 @@ export async function GET(request: Request) {
   };
   const assetCostBasis = new Map<string, AssetCostBasis>();
 
+  // Por ativo: valor tomado (borrows) e valor pago (repays) em USD histórico
+  const borrowUsdByAsset = new Map<string, number>();
+  const repayUsdByAsset = new Map<string, number>();
+  const symbolByAsset = new Map<string, string>();
+
   (data as PnlRow[] | null | undefined)?.forEach((row) => {
     // Calcular amount_usd se não estiver disponível, usando amount * price_usd
     let amountUsd = Number(row.amount_usd ?? 0);
@@ -272,8 +277,23 @@ export async function GET(request: Request) {
     else if (kind === "liquidation") totals.liquidationUsd += amountUsd;
     else totals.otherUsd += amountUsd;
 
-    // Track cost basis for mark-to-market
     const assetAddress = row.asset_address?.toLowerCase();
+    if (assetAddress && (kind === "borrow" || kind === "repay")) {
+      if (!borrowUsdByAsset.has(assetAddress)) {
+        borrowUsdByAsset.set(assetAddress, 0);
+        repayUsdByAsset.set(assetAddress, 0);
+      }
+      if (kind === "borrow") borrowUsdByAsset.set(assetAddress, (borrowUsdByAsset.get(assetAddress)! + amountUsd));
+      else repayUsdByAsset.set(assetAddress, (repayUsdByAsset.get(assetAddress)! + amountUsd));
+      if (row.asset_symbol) {
+        symbolByAsset.set(assetAddress, row.asset_symbol);
+        const sym = row.asset_symbol.toLowerCase();
+        borrowUsdByAsset.set(sym, (borrowUsdByAsset.get(sym) ?? 0) + (kind === "borrow" ? amountUsd : 0));
+        repayUsdByAsset.set(sym, (repayUsdByAsset.get(sym) ?? 0) + (kind === "repay" ? amountUsd : 0));
+      }
+    }
+
+    // Track cost basis for mark-to-market
     if (assetAddress && row.amount && row.price_usd) {
       const amount = Number(row.amount);
       const priceUsd = Number(row.price_usd);
@@ -391,10 +411,36 @@ export async function GET(request: Request) {
   
   // P&L para dívida: se emprestaste $100 e agora deves $90, isso é um GANHO de $10
   // P&L = Valor emprestado - Valor atual (positivo = ganho, negativo = perda)
-  // Ensure all values are numbers (not NaN or undefined)
   const safeBorrowedUsd = Number.isFinite(borrowedUsd) ? borrowedUsd : 0;
   const safeCurrentDebtValue = Number.isFinite(currentDebtValue) ? currentDebtValue : 0;
   const debtPnl = safeBorrowedUsd - safeCurrentDebtValue;
+
+  // Mapa symbol -> asset address para match quando a posição usa symbol (ex.: Compound)
+  const assetBySymbol = new Map<string, string>();
+  symbolByAsset.forEach((sym, addr) => assetBySymbol.set(sym.toLowerCase(), addr));
+
+  // P&L por ativo (método mais fino): valor tomado vs valor atual a devolver por token
+  type DebtPnlAsset = { symbol: string; borrowedUsd: number; currentValueUsd: number; pnl: number };
+  const debtPnlPerAsset: DebtPnlAsset[] = [];
+  for (const position of currentPositions) {
+    if (position.debtUsd <= 0) continue;
+    const addrKey = position.address?.toLowerCase() || "";
+    const symbolKey = position.symbol?.toLowerCase() || "";
+    const key = addrKey || (symbolKey ? assetBySymbol.get(symbolKey) ?? symbolKey : "");
+    const histBorrow = borrowUsdByAsset.get(key) ?? borrowUsdByAsset.get(symbolKey) ?? 0;
+    const histRepay = repayUsdByAsset.get(key) ?? repayUsdByAsset.get(symbolKey) ?? 0;
+    const borrowedUsdAsset = histBorrow - histRepay;
+    const basis = assetCostBasis.get(key);
+    const borrowedUsdForPnl = borrowedUsdAsset > 0 ? borrowedUsdAsset : (basis?.debtCost ?? position.debtUsd);
+    const currentValueUsdAsset = position.debtUsd;
+    const pnlAsset = borrowedUsdForPnl - currentValueUsdAsset;
+    debtPnlPerAsset.push({
+      symbol: position.symbol || key || "?",
+      borrowedUsd: Number.isFinite(borrowedUsdForPnl) ? borrowedUsdForPnl : 0,
+      currentValueUsd: Number.isFinite(currentValueUsdAsset) ? currentValueUsdAsset : 0,
+      pnl: Number.isFinite(pnlAsset) ? pnlAsset : 0,
+    });
+  }
 
   // Ensure all return values are finite numbers
   const safeTotals = {
@@ -419,9 +465,10 @@ export async function GET(request: Request) {
     netCollateralFlow: safeNetCollateralFlow,
     netDebtFlow: safeNetDebtFlow,
     debtPnl: {
-      borrowedUsd: safeBorrowedUsd, // Quanto emprestaste (total líquido em USD histórico, ou custo médio ponderado como fallback)
-      currentValueUsd: safeCurrentDebtValue, // Quanto vale agora
-      pnl: debtPnl, // P&L = Valor emprestado - Valor atual
+      borrowedUsd: safeBorrowedUsd,
+      currentValueUsd: safeCurrentDebtValue,
+      pnl: debtPnl,
+      perAsset: debtPnlPerAsset,
     },
     markToMarket: {
       pnl: safeMarkToMarketPnl,

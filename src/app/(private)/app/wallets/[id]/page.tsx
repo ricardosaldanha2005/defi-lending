@@ -85,9 +85,10 @@ type PnlData = {
   netCollateralFlow: number;
   netDebtFlow: number;
   debtPnl?: {
-    borrowedUsd: number; // Quanto emprestaste (custo histórico)
-    currentValueUsd: number; // Quanto vale agora
-    pnl: number; // P&L = Valor atual - Custo histórico
+    borrowedUsd: number;
+    currentValueUsd: number;
+    pnl: number;
+    perAsset?: Array<{ symbol: string; borrowedUsd: number; currentValueUsd: number; pnl: number }>;
   };
   markToMarket?: {
     pnl: number;
@@ -281,6 +282,22 @@ function PnlCard({
                   ? "Perda: o empréstimo vale mais agora (moeda valorizou)"
                   : "Sem P&L: o valor atual é igual ao valor emprestado"}
               </p>
+            </>
+          )}
+          {debtPnl?.perAsset && debtPnl.perAsset.length > 0 && (
+            <>
+              <Separator />
+              <p className="text-sm font-medium">Por ativo</p>
+              <ul className="space-y-2 text-sm">
+                {debtPnl.perAsset.map((a) => (
+                  <li key={a.symbol} className="flex justify-between items-center">
+                    <span className="font-mono text-muted-foreground">{a.symbol}</span>
+                    <span className={a.pnl >= 0 ? "text-green-600" : "text-red-600"}>
+                      {formatUsd(a.pnl)}
+                    </span>
+                  </li>
+                ))}
+              </ul>
             </>
           )}
           {!debtPnl && (
