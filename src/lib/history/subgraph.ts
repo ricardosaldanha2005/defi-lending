@@ -592,6 +592,38 @@ async function resolveAaveSchemaConfig(url: string): Promise<AaveSchemaConfig[]>
     if (candidate) configs.push(candidate);
   }
 
+  // Garantir borrows/repays para a aba Histórico: se existirem no schema mas não
+  // entraram nos configs (ex.: required args diferentes), adicionar config mínimo.
+  const borrowRepayNames = ["borrows", "repays"];
+  for (const name of borrowRepayNames) {
+    if (configs.some((c) => c.queryField === name)) continue;
+    const field = fields.find((f) => f.name === name);
+    if (!field) continue;
+    const requiredArgs = field.args
+      .filter((arg) => isRequiredArg(arg.type))
+      .map((arg) => arg.name);
+    const supportedRequired = new Set(["user", "account", "from", "skip", "where"]);
+    if (requiredArgs.some((arg) => !supportedRequired.has(arg))) continue;
+    configs.push({
+      queryField: field.name,
+      eventTypeName: unwrapTypeName(field.type) ?? name,
+      fields: {
+        id: "id",
+        timestamp: "timestamp",
+        txHash: "transactionHash",
+        logIndex: "logIndex",
+        blockNumber: "blockNumber",
+        action: "eventType",
+        amount: "amount",
+        amountUsd: "amountUSD",
+      },
+      orderByField: "timestamp",
+      fallbackEventType: field.name,
+      whereUserField: "user",
+      requiresWhere: true,
+    });
+  }
+
   if (configs.length > 0) {
     return configs;
   }

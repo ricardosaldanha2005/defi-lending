@@ -272,10 +272,17 @@ export async function POST(request: Request) {
       );
     }
 
+    const eventTypeCounts = inserts.reduce<Record<string, number>>((acc, row) => {
+      const t = row.event_type || "unknown";
+      acc[t] = (acc[t] ?? 0) + 1;
+      return acc;
+    }, {});
+
     return NextResponse.json({
       ok: true,
       synced: events.length,
       lastTimestamp: maxTimestamp,
+      eventTypeCounts,
     });
   } catch (error) {
     console.error("history.events.fetch", error);
