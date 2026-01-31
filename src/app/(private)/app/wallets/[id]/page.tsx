@@ -301,7 +301,8 @@ function HistoryEventsTab({
   walletId: string;
   chain?: string;
 }) {
-  const [eventTypeFilter, setEventTypeFilter] = useState<string>("all");
+  // Por defeito: só movimentos de borrow (entradas + saídas)
+  const [eventTypeFilter, setEventTypeFilter] = useState<string>("borrow_only");
   const [assetFilter, setAssetFilter] = useState<string>("all");
 
   const fetcher = (url: string) => fetch(url).then((r) => r.json());
@@ -313,63 +314,36 @@ function HistoryEventsTab({
 
   const allEvents = data?.events || [];
 
-  // Get unique event types and assets
-  const eventTypes = useMemo(() => {
-    const types = new Set<string>();
-    allEvents.forEach((e) => {
+  // Só eventos de borrow/repay para esta aba (movimentos do empréstimo)
+  const borrowRelatedEvents = useMemo(() => {
+    return allEvents.filter((e) => {
       const key = e.event_type.toLowerCase();
-      if (key.includes("borrow")) types.add("borrow");
-      else if (key.includes("repay")) types.add("repay");
-      else if (key.includes("supply") || key.includes("deposit"))
-        types.add("deposit");
-      else if (key.includes("withdraw")) types.add("withdraw");
-      else if (key.includes("liquidat")) types.add("liquidation");
-      else types.add("other");
+      return key.includes("borrow") || key.includes("repay");
     });
-    return Array.from(types).sort();
   }, [allEvents]);
 
+  // Assets que aparecem nos movimentos de borrow
   const assets = useMemo(() => {
     const assetSet = new Set<string>();
-    allEvents.forEach((e) => {
+    borrowRelatedEvents.forEach((e) => {
       if (e.asset_symbol) assetSet.add(e.asset_symbol);
     });
     return Array.from(assetSet).sort();
-  }, [allEvents]);
+  }, [borrowRelatedEvents]);
 
-  // Filter events
+  // Filtro: por defeito só borrow (entradas e saídas); opcionalmente só borrow ou só repay
   const events = useMemo(() => {
-    return allEvents.filter((e) => {
-      if (eventTypeFilter !== "all") {
-        const key = e.event_type.toLowerCase();
-        if (eventTypeFilter === "borrow" && !key.includes("borrow"))
-          return false;
-        if (eventTypeFilter === "repay" && !key.includes("repay")) return false;
-        if (
-          eventTypeFilter === "deposit" &&
-          !key.includes("supply") &&
-          !key.includes("deposit")
-        )
-          return false;
-        if (eventTypeFilter === "withdraw" && !key.includes("withdraw"))
-          return false;
-        if (eventTypeFilter === "liquidation" && !key.includes("liquidat"))
-          return false;
-        if (eventTypeFilter === "other") {
-          const hasKnownType =
-            key.includes("borrow") ||
-            key.includes("repay") ||
-            key.includes("supply") ||
-            key.includes("deposit") ||
-            key.includes("withdraw") ||
-            key.includes("liquidat");
-          if (hasKnownType) return false;
-        }
-      }
+    return borrowRelatedEvents.filter((e) => {
+      if (eventTypeFilter === "all") return true;
+      const key = e.event_type.toLowerCase();
+      if (eventTypeFilter === "borrow_only")
+        return key.includes("borrow") || key.includes("repay");
+      if (eventTypeFilter === "borrow") return key.includes("borrow");
+      if (eventTypeFilter === "repay") return key.includes("repay");
       if (assetFilter !== "all" && e.asset_symbol !== assetFilter) return false;
       return true;
-    });
-  }, [allEvents, eventTypeFilter, assetFilter]);
+    }).filter((e) => assetFilter === "all" || e.asset_symbol === assetFilter);
+  }, [borrowRelatedEvents, eventTypeFilter, assetFilter]);
 
   const getEventTypeLabel = (type: string) => {
     const key = type.toLowerCase();
@@ -411,14 +385,14 @@ function HistoryEventsTab({
     );
   }
 
-  if (events.length === 0) {
+  if (borrowRelatedEvents.length === 0) {
     return (
       <Card>
         <CardHeader>
-          <CardTitle>Eventos Históricos</CardTitle>
+          <CardTitle>Movimentos de borrow</CardTitle>
         </CardHeader>
         <CardContent className="py-8 text-center text-sm text-muted-foreground">
-          Nenhum evento encontrado. Sincroniza os eventos históricos primeiro.
+          Nenhum movimento de borrow/repay encontrado. Sincroniza os eventos históricos primeiro.
         </CardContent>
       </Card>
     );
@@ -427,12 +401,12 @@ function HistoryEventsTab({
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Eventos Históricos ({events.length})</CardTitle>
+        <CardTitle>Movimentos de borrow ({events.length})</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="flex gap-4 items-end">
           <div className="flex-1">
-            <Label htmlFor="event-type-filter">Tipo de Evento</Label>
+            <Label htmlFor="event-type-filter">Tipo</Label>
             <Select
               value={eventTypeFilter}
               onValueChange={setEventTypeFilter}
@@ -441,12 +415,9 @@ function HistoryEventsTab({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">Todos</SelectItem>
-                {eventTypes.map((type) => (
-                  <SelectItem key={type} value={type}>
-                    {type.charAt(0).toUpperCase() + type.slice(1)}
-                  </SelectItem>
-                ))}
+                <SelectItem value="borrow_only">Entradas e saídas (borrow + repay)</SelectItem>
+                <SelectItem value="borrow">Só entradas (borrow)</SelectItem>
+                <SelectItem value="repay">Só saídas (repay)</SelectItem>
               </SelectContent>
             </Select>
           </div>
