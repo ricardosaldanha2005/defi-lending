@@ -1319,12 +1319,17 @@ async function resolveCompoundSchemaConfig(
       "withdrawEvents",
       "transferEvents",
       "absorbEvents",
+      "usages",
+      "usage",
+      "positionAccountings",
+      "marketAccountings",
     ]) ??
     fields.find((field) => field.name.toLowerCase().includes("event"))?.name ??
+    fields.find((field) => field.name.toLowerCase().includes("usage"))?.name ??
     "accountEvents";
   const queryField = fields.find((field) => field.name === queryFieldName);
   if (!queryField) {
-    const available = fields.map((f) => f.name).slice(0, 20).join(", ");
+    const available = fields.map((f) => f.name).slice(0, 25).join(", ");
     throw new Error(
       `Compound subgraph: nenhum campo de eventos encontrado. Campos disponíveis (ex.): ${available}`,
     );
@@ -1366,14 +1371,27 @@ async function resolveCompoundSchemaConfig(
   const logIndexField = pickField(eventFields, ["logIndex", "log_index"]);
   const blockNumberField = pickField(eventFields, ["blockNumber", "block_number"]);
   const eventTypeField = pickField(eventFields, ["eventType", "type", "action"]);
-  const amountField = pickField(eventFields, ["amount", "amountBeforeFee", "amountAfterFee"]);
+  const amountField = pickField(eventFields, [
+    "amount",
+    "amountBeforeFee",
+    "amountAfterFee",
+    "principal",
+    "balance",
+  ]);
   const amountUsdField = pickField(eventFields, [
     "amountUsd",
     "amountUSD",
     "amount_usd",
     "amountInUSD",
   ]);
-  const assetField = pickField(eventFields, ["asset", "token"]);
+  const assetField = pickField(eventFields, ["asset", "token", "market"]);
+
+  const orderByField = timestampField ?? blockNumberField;
+  if (!orderByField) {
+    throw new Error(
+      `Compound subgraph: tipo "${eventTypeName}" sem campo timestamp nem blockNumber. Campos: ${eventFields.map((f) => f.name).slice(0, 15).join(", ")}`,
+    );
+  }
 
   let assetFields: CompoundSchemaConfig["assetFields"];
   if (assetField) {
@@ -1450,7 +1468,7 @@ async function resolveCompoundSchemaConfig(
     },
     whereAccountField,
     whereTimestampField,
-    orderByField: timestampField,
+    orderByField,
     assetField,
     assetFields,
   };
