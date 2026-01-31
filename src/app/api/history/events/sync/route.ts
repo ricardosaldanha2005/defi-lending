@@ -85,10 +85,12 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "walletId required" }, { status: 400 });
   }
 
+  const byAddress = isAddress(walletId);
+  const walletLookup = byAddress ? walletId.toLowerCase() : walletId;
   const { data: wallet, error: walletError } = await supabase
     .from("user_wallets")
     .select("id,user_id,address,chain,protocol")
-    .eq("id", walletId)
+    .eq(byAddress ? "address" : "id", walletLookup)
     .eq("user_id", user.id)
     .maybeSingle();
 
@@ -98,7 +100,10 @@ export async function POST(request: Request) {
   }
 
   if (!wallet) {
-    return NextResponse.json({ error: "Wallet not found" }, { status: 404 });
+    return NextResponse.json(
+      { error: byAddress ? "Wallet not found for this address" : "Wallet not found" },
+      { status: 404 },
+    );
   }
 
   if (!wallet.address || !isAddress(wallet.address)) {
