@@ -279,7 +279,17 @@ export async function fetchSubgraphEvents({
 }: FetchParams): Promise<NormalizedEvent[]> {
   const url = getSubgraphUrl(protocol, chain);
   if (!url) {
-    throw new Error("Missing subgraph URL for protocol/chain.");
+    const envVar =
+      protocol === "compound"
+        ? chain.toLowerCase() === "base"
+          ? "COMPOUND_SUBGRAPH_BASE"
+          : "COMPOUND_SUBGRAPH_ARBITRUM"
+        : chain.toLowerCase() === "arbitrum"
+          ? "AAVE_SUBGRAPH_ARBITRUM"
+          : "AAVE_SUBGRAPH_POLYGON";
+    throw new Error(
+      `Subgraph URL não configurado para ${protocol} em ${chain}. Define a variável de ambiente ${envVar} no Vercel (ou .env.local).`,
+    );
   }
   const lowerAddress = address.toLowerCase();
 
