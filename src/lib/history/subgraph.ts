@@ -527,6 +527,38 @@ async function fetchAaveEvents(
   return events;
 }
 
+async function getWhereUserFieldForField(
+  url: string,
+  queryField: QueryFieldInfo,
+): Promise<string | undefined> {
+  const whereArg = queryField.args.find((arg) => arg.name === "where");
+  const whereTypeName = whereArg ? unwrapTypeName(whereArg.type) : null;
+  if (!whereTypeName) return undefined;
+  const whereTypeInfo = await postGraphQL<{
+    __type?: { inputFields?: Array<{ name: string }> };
+  }>(
+    url,
+    `
+      query WhereType($name: String!) {
+        __type(name: $name) {
+          inputFields { name }
+        }
+      }
+    `,
+    { name: whereTypeName },
+  );
+  const whereFields = whereTypeInfo.__type?.inputFields ?? [];
+  return pickField(whereFields, [
+    "user",
+    "account",
+    "borrower",
+    "from",
+    "to",
+    "user_",
+    "account_",
+  ]);
+}
+
 async function getAaveSchemaConfig(url: string): Promise<AaveSchemaConfig[]> {
   if (!aaveSchemaCache.has(url)) {
     aaveSchemaCache.set(url, resolveAaveSchemaConfig(url));
@@ -593,7 +625,8 @@ async function resolveAaveSchemaConfig(url: string): Promise<AaveSchemaConfig[]>
   }
 
   // Garantir borrows/repays para a aba Histórico: se existirem no schema mas não
-  // entraram nos configs (ex.: required args diferentes), adicionar config mínimo.
+  // entraram nos configs, adicionar config mínimo. O filtro por user/account é
+  // obrigatório para só trazer eventos da carteira do utilizador.
   const borrowRepayNames = ["borrows", "repays"];
   for (const name of borrowRepayNames) {
     if (configs.some((c) => c.queryField === name)) continue;
@@ -604,6 +637,8 @@ async function resolveAaveSchemaConfig(url: string): Promise<AaveSchemaConfig[]>
       .map((arg) => arg.name);
     const supportedRequired = new Set(["user", "account", "from", "skip", "where"]);
     if (requiredArgs.some((arg) => !supportedRequired.has(arg))) continue;
+    const whereUserField = await getWhereUserFieldForField(url, field);
+    if (!whereUserField) continue;
     configs.push({
       queryField: field.name,
       eventTypeName: unwrapTypeName(field.type) ?? name,
@@ -619,7 +654,7 @@ async function resolveAaveSchemaConfig(url: string): Promise<AaveSchemaConfig[]>
       },
       orderByField: "timestamp",
       fallbackEventType: field.name,
-      whereUserField: "user",
+      whereUserField,
       requiresWhere: true,
     });
   }
