@@ -322,9 +322,13 @@ function HistoryEventsTab({
     { refreshInterval: 30000 },
   );
 
+  const SYNC_TIMEOUT_MS = 90_000; // 90s – subgraph pode ser lento
+
   const runSync = async () => {
     setIsSyncing(true);
     setSyncError(null);
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), SYNC_TIMEOUT_MS);
     try {
       const r = await fetch("/api/history/events/sync", {
         method: "POST",
@@ -335,6 +339,7 @@ function HistoryEventsTab({
           includePrices: true,
           maxEvents: 2000,
         }),
+        signal: controller.signal,
       });
       const j = await r.json().catch(() => ({}));
       if (!r.ok) {
@@ -344,8 +349,13 @@ function HistoryEventsTab({
       }
       await mutate();
     } catch (e) {
-      setSyncError(e instanceof Error ? e.message : String(e));
+      if (e instanceof Error && e.name === "AbortError") {
+        setSyncError("Sincronização expirou (máx. 90 s). Tenta novamente ou reduz maxEvents.");
+      } else {
+        setSyncError(e instanceof Error ? e.message : String(e));
+      }
     } finally {
+      clearTimeout(timeoutId);
       setIsSyncing(false);
     }
   };

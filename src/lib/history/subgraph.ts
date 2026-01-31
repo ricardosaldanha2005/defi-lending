@@ -117,6 +117,7 @@ const COMPOUND_SUBGRAPHS: Record<string, string | undefined> = {
 };
 
 const PAGE_SIZE = 1000;
+const MAX_COMPOUND_PAGES = 25; // evita loop infinito se subgraph devolver sempre páginas cheias sem filtro por conta
 const compoundSchemaCache = new Map<string, Promise<CompoundSchemaConfig>>();
 const aaveSchemaCache = new Map<string, Promise<AaveSchemaConfig[]>>();
 
@@ -1215,7 +1216,8 @@ async function fetchCompoundEvents(
   const events: NormalizedEvent[] = [];
   const limit = maxEvents && maxEvents > 0 ? maxEvents : null;
   let skip = 0;
-  while (true) {
+  let pageCount = 0;
+  while (pageCount < MAX_COMPOUND_PAGES) {
     const data = await postGraphQL<Record<string, Array<Record<string, unknown>> | undefined>>(
       url,
       query,
@@ -1225,6 +1227,7 @@ async function fetchCompoundEvents(
       skip,
     });
     const batch = data[schema.queryField] ?? [];
+    pageCount += 1;
     for (const raw of batch) {
       const asset =
         schema.assetField && raw[schema.assetField]
@@ -1275,7 +1278,9 @@ async function fetchCompoundEvents(
   return events;
 }
 
-async function getCompoundSchemaConfig(url: string): Promise<CompoundSchemaConfig> {
+async function getCompoundSchemaConfig(
+  url: string,
+): Promise<CompoundSchemaConfig> {
   if (!compoundSchemaCache.has(url)) {
     compoundSchemaCache.set(url, resolveCompoundSchemaConfig(url));
   }
