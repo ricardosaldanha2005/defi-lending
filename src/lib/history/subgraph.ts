@@ -1310,12 +1310,24 @@ async function resolveCompoundSchemaConfig(
 
   const fields = data.__schema?.queryType?.fields ?? [];
   const queryFieldName =
-    pickField(fields, ["accountEvents", "events", "accountEvent", "event"]) ??
+    pickField(fields, [
+      "accountEvents",
+      "events",
+      "accountEvent",
+      "event",
+      "supplyEvents",
+      "withdrawEvents",
+      "transferEvents",
+      "absorbEvents",
+    ]) ??
     fields.find((field) => field.name.toLowerCase().includes("event"))?.name ??
     "accountEvents";
   const queryField = fields.find((field) => field.name === queryFieldName);
   if (!queryField) {
-    throw new Error("Compound subgraph has no event query field.");
+    const available = fields.map((f) => f.name).slice(0, 20).join(", ");
+    throw new Error(
+      `Compound subgraph: nenhum campo de eventos encontrado. Campos disponíveis (ex.): ${available}`,
+    );
   }
 
   const eventTypeName = unwrapTypeName(queryField.type);
