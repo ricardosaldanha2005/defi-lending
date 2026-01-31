@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { isAddress } from "viem";
 
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
@@ -13,9 +14,24 @@ export async function GET(request: Request) {
   }
 
   const { searchParams } = new URL(request.url);
-  const walletId = searchParams.get("walletId");
-  if (!walletId) {
+  const walletIdParam = searchParams.get("walletId");
+  if (!walletIdParam) {
     return NextResponse.json({ error: "walletId required" }, { status: 400 });
+  }
+
+  // Aceitar wallet UUID ou endereço (como na sync)
+  let walletId: string = walletIdParam;
+  if (isAddress(walletIdParam)) {
+    const { data: wallet } = await supabase
+      .from("user_wallets")
+      .select("id")
+      .eq("address", walletIdParam.toLowerCase())
+      .eq("user_id", user.id)
+      .maybeSingle();
+    if (!wallet?.id) {
+      return NextResponse.json({ events: [] });
+    }
+    walletId = wallet.id;
   }
 
   const limitRaw = Number(searchParams.get("limit") ?? 200);
@@ -26,7 +42,7 @@ export async function GET(request: Request) {
   let query = supabase
     .from("strategy_events")
     .select(
-      "wallet_id,protocol,chain,tx_hash,log_index,block_number,block_timestamp,event_type,asset_address,asset_symbol,asset_decimals,amount,amount_usd,price_usd",
+      "id,wallet_id,protocol,chain,tx_hash,log_index,block_number,block_timestamp,event_type,asset_address,asset_symbol,asset_decimals,amount,amount_usd,price_usd",
     )
     .eq("user_id", user.id)
     .eq("wallet_id", walletId);

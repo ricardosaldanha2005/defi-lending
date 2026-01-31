@@ -63,13 +63,14 @@ type ReserveSummary = {
 };
 
 type HistoryEvent = {
-  id: string;
+  id?: string;
   event_type: string;
   asset_symbol: string | null;
   amount: number | null;
   amount_usd: number | null;
   block_timestamp: string;
   tx_hash: string;
+  log_index?: number;
 };
 
 type PnlData = {
@@ -536,7 +537,7 @@ function HistoryEventsTab({
             </TableHeader>
             <TableBody>
               {events.map((event) => (
-                <TableRow key={event.id}>
+                <TableRow key={event.id ?? `${event.tx_hash ?? ""}-${event.log_index ?? ""}`}>
                   <TableCell className="text-sm">
                     {new Date(event.block_timestamp).toLocaleDateString("pt-PT", {
                       year: "numeric",
