@@ -551,6 +551,8 @@ function HistoryEventsTab({
     );
   }
 
+  const allUnknown = events.length > 0 && events.every((e) => (e.event_type ?? "").toUpperCase() === "UNKNOWN");
+
   return (
     <Card>
       <CardHeader>
@@ -559,6 +561,11 @@ function HistoryEventsTab({
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
+        {allUnknown && (
+          <p className="text-sm text-muted-foreground">
+            O subgraph desta rede expõe registos de posição (PositionAccounting), não eventos Borrow/Repay. As datas são aproximadas a partir do número de bloco. Para histórico de borrow/repay com tipo e valor é necessário um subgraph que indexe esses eventos.
+          </p>
+        )}
         <div className="flex gap-4 items-end">
           <div className="flex-1">
             <Label htmlFor="event-type-filter">Tipo</Label>

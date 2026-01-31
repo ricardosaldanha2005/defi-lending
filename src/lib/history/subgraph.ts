@@ -45,6 +45,8 @@ type CompoundSchemaConfig = {
   };
   whereAccountField?: string;
   whereTimestampField?: string;
+  /** Filtro por bloco (ex.: lastUpdatedBlockNumber_gte) para trazer dados recentes */
+  whereBlockNumberGteField?: string;
   orderByField?: string;
   assetField?: string;
   assetFields?: {
@@ -143,6 +145,17 @@ function blockNumberToApproxTimestamp(
   const cfg = CHAIN_GENESIS_BLOCK_TIME[norm];
   if (!cfg) return blockNumber * 12; // fallback antigo
   return Math.round(cfg.genesis + blockNumber * cfg.blockTime);
+}
+
+/** Converte timestamp Unix para bloco aproximado (para filtrar Compound por bloco) */
+function timestampToApproxBlockNumber(
+  chain: string,
+  timestamp: number,
+): number {
+  const norm = normalizeChain(chain);
+  const cfg = CHAIN_GENESIS_BLOCK_TIME[norm];
+  if (!cfg || timestamp <= cfg.genesis) return 0;
+  return Math.floor((timestamp - cfg.genesis) / cfg.blockTime);
 }
 
 function getSubgraphUrl(protocol: Protocol, chain: string) {
@@ -1231,7 +1244,15 @@ async function fetchCompoundEvents(
   if (schema.whereAccountField) {
     whereEntries.push(`${schema.whereAccountField}: $user`);
   }
-  if (schema.whereTimestampField) {
+  const useBlockFilter =
+    chain &&
+    schema.whereBlockNumberGteField &&
+    Number.isFinite(fromTimestamp) &&
+    fromTimestamp > 0;
+  if (useBlockFilter) {
+    const fromBlock = timestampToApproxBlockNumber(chain, fromTimestamp);
+    whereEntries.push(`${schema.whereBlockNumberGteField}: $fromBlock`);
+  } else if (schema.whereTimestampField) {
     whereEntries.push(`${schema.whereTimestampField}: $from`);
   }
   const whereClause = whereEntries.length
@@ -1244,7 +1265,15 @@ async function fetchCompoundEvents(
     .filter(Boolean)
     .join(", ");
 
-  const query = `
+  const query = useBlockFilter
+    ? `
+    query AccountEvents($user: String!, $fromBlock: Int!, $skip: Int!) {
+      ${schema.queryField}(${args}) {
+        ${selection}
+      }
+    }
+  `
+    : `
     query AccountEvents($user: String!, $from: Int!, $skip: Int!) {
       ${schema.queryField}(${args}) {
         ${selection}
@@ -1256,15 +1285,23 @@ async function fetchCompoundEvents(
   const limit = maxEvents && maxEvents > 0 ? maxEvents : null;
   let skip = 0;
   let pageCount = 0;
+  const variables: Record<string, unknown> = useBlockFilter
+    ? {
+        user: address,
+        fromBlock: timestampToApproxBlockNumber(chain!, fromTimestamp),
+        skip,
+      }
+    : {
+        user: address,
+        from: Math.max(0, Math.floor(fromTimestamp)),
+        skip,
+      };
   while (pageCount < MAX_COMPOUND_PAGES) {
     const data = await postGraphQL<Record<string, Array<Record<string, unknown>> | undefined>>(
       url,
       query,
-      {
-      user: address,
-      from: Math.max(0, Math.floor(fromTimestamp)),
-      skip,
-    });
+      { ...variables, skip },
+    );
     const batch = data[schema.queryField] ?? [];
     pageCount += 1;
     for (const raw of batch) {
@@ -1555,6 +1592,7 @@ async function resolveCompoundSchemaConfig(
   const whereTypeName = whereArg ? unwrapTypeName(whereArg.type) : null;
   let whereAccountField: string | undefined;
   let whereTimestampField: string | undefined;
+  let whereBlockNumberGteField: string | undefined;
   if (whereTypeName) {
     const whereTypeInfo = await postGraphQL<{
       __type?: { inputFields?: Array<{ name: string }> };
@@ -1581,6 +1619,11 @@ async function resolveCompoundSchemaConfig(
       "blockTimestamp_gte",
       "timestamp_gt",
     ]);
+    whereBlockNumberGteField = pickField(whereFields, [
+      "lastUpdatedBlockNumber_gte",
+      "blockNumber_gte",
+      "block_number_gte",
+    ]);
   }
 
   return {
@@ -1598,6 +1641,7 @@ async function resolveCompoundSchemaConfig(
     },
     whereAccountField,
     whereTimestampField,
+    whereBlockNumberGteField,
     orderByField,
     assetField,
     assetFields,
