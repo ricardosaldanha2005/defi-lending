@@ -318,16 +318,41 @@ function HistoryEventsTab({
   walletId: string;
   chain?: string;
 }) {
-  // Por defeito: só movimentos de borrow (entradas + saídas)
   const [eventTypeFilter, setEventTypeFilter] = useState<string>("borrow_only");
   const [assetFilter, setAssetFilter] = useState<string>("all");
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [syncError, setSyncError] = useState<string | null>(null);
 
   const fetcher = (url: string) => fetch(url).then((r) => r.json());
-  const { data, error, isLoading } = useSWR<{ events: HistoryEvent[] }>(
+  const { data, error, isLoading, mutate } = useSWR<{ events: HistoryEvent[] }>(
     `/api/history/events?walletId=${walletId}&limit=1000`,
     fetcher,
     { refreshInterval: 30000 },
   );
+
+  const runSync = async () => {
+    setIsSyncing(true);
+    setSyncError(null);
+    try {
+      const r = await fetch("/api/history/events/sync", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          walletId,
+          reset: true,
+          includePrices: true,
+          maxEvents: 2000,
+        }),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error((j as { error?: string }).error || (j as { detail?: string }).detail || "Sincronização falhou");
+      await mutate();
+    } catch (e) {
+      setSyncError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setIsSyncing(false);
+    }
+  };
 
   const allEvents = data?.events || [];
 
@@ -433,8 +458,19 @@ function HistoryEventsTab({
         <CardHeader>
           <CardTitle>Movimentos de borrow</CardTitle>
         </CardHeader>
-        <CardContent className="py-8 text-center text-sm text-muted-foreground">
-          Nenhum movimento de borrow/repay encontrado. Sincroniza os eventos históricos primeiro.
+        <CardContent className="py-8 space-y-4 text-center">
+          <p className="text-sm text-muted-foreground">
+            Nenhum movimento de borrow/repay encontrado. Sincroniza os eventos históricos para esta carteira.
+          </p>
+          <Button
+            onClick={runSync}
+            disabled={isSyncing}
+          >
+            {isSyncing ? "A sincronizar…" : "Sincronizar eventos"}
+          </Button>
+          {syncError && (
+            <p className="text-sm text-destructive">{syncError}</p>
+          )}
         </CardContent>
       </Card>
     );
