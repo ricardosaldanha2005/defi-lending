@@ -1309,121 +1309,130 @@ async function resolveCompoundSchemaConfig(
   );
 
   const fields = data.__schema?.queryType?.fields ?? [];
-  const queryFieldName =
-    pickField(fields, [
-      "accountEvents",
-      "events",
-      "accountEvent",
-      "event",
-      "supplyEvents",
-      "withdrawEvents",
-      "transferEvents",
-      "absorbEvents",
-      "usages",
-      "usage",
-      "positionAccountings",
-      "marketAccountings",
-    ]) ??
-    fields.find((field) => field.name.toLowerCase().includes("event"))?.name ??
-    fields.find((field) => field.name.toLowerCase().includes("usage"))?.name ??
-    "accountEvents";
-  const queryField = fields.find((field) => field.name === queryFieldName);
-  if (!queryField) {
-    const available = fields.map((f) => f.name).slice(0, 25).join(", ");
-    throw new Error(
-      `Compound subgraph: nenhum campo de eventos encontrado. Campos disponíveis (ex.): ${available}`,
-    );
-  }
-
-  let eventTypeName = unwrapTypeName(queryField.type);
-  if (!eventTypeName) {
-    eventTypeName = deriveEntityTypeName(queryField.name);
-  }
-  if (!eventTypeName) {
-    const typeStr = queryField.type
-      ? JSON.stringify({
-          kind: queryField.type.kind,
-          name: queryField.type.name,
-          ofType: queryField.type.ofType
-            ? { kind: queryField.type.ofType.kind, name: queryField.type.ofType.name }
-            : null,
-        })
-      : "null";
-    throw new Error(
-      `Compound subgraph: tipo do campo "${queryField.name}" não resolvido. type=${typeStr}`,
-    );
-  }
-
-  const eventTypeInfo = await postGraphQL<{
-    __type?: { name?: string; fields?: Array<{ name: string; type: TypeRef }> };
-  }>(
-    url,
-    `
-      query EventType($name: String!) {
-        __type(name: $name) {
-          name
-          fields {
-            name
-            type { kind name ofType { kind name ofType { kind name } } }
-          }
-        }
-      }
-    `,
-    { name: eventTypeName },
+  const candidateNames = [
+    "accountEvents",
+    "events",
+    "accountEvent",
+    "event",
+    "supplyEvents",
+    "withdrawEvents",
+    "transferEvents",
+    "absorbEvents",
+    "positionAccountings",
+    "marketAccountings",
+    "usages",
+    "usage",
+  ];
+  const orderedCandidates = candidateNames.filter((name) =>
+    fields.some((f) => f.name === name),
   );
+  const fallback =
+    fields.find((f) => f.name.toLowerCase().includes("event"))?.name ??
+    fields.find((f) => f.name.toLowerCase().includes("usage"))?.name;
+  const toTry = orderedCandidates.length
+    ? orderedCandidates
+    : fallback
+      ? [fallback]
+      : [];
 
-  let resolvedType = eventTypeInfo.__type;
-  const triedNames = [eventTypeName];
-  if (!resolvedType) {
-    const alternatives = [
-      eventTypeName.charAt(0).toLowerCase() + eventTypeName.slice(1),
-      queryField.name.charAt(0).toUpperCase() + queryField.name.slice(1),
-    ].filter((n) => n && !triedNames.includes(n));
-    for (const alt of alternatives) {
-      triedNames.push(alt);
-      const altInfo = await postGraphQL<{
-        __type?: { name?: string; fields?: Array<{ name: string; type: TypeRef }> };
-      }>(
-        url,
-        `
-          query EventType($name: String!) {
-            __type(name: $name) {
-              name
-              fields {
-                name
-                type { kind name ofType { kind name ofType { kind name } } }
-              }
-            }
-          }
-        `,
-        { name: alt },
-      );
-      if (altInfo.__type?.fields?.length) {
-        resolvedType = altInfo.__type;
-        eventTypeName = altInfo.__type.name ?? alt;
-        break;
-      }
-    }
-  }
-  if (!resolvedType) {
-    const typesData = await postGraphQL<{
-      __schema?: { types?: Array<{ name: string }> };
+  let queryField: QueryFieldInfo | null = null;
+  let eventTypeName = "";
+  let resolvedType: { name?: string; fields?: Array<{ name: string; type: TypeRef }> } | null = null;
+  let eventFields: Array<{ name: string; type: TypeRef }> = [];
+  const errors: string[] = [];
+
+  for (const candidateName of toTry) {
+    const qf = fields.find((f) => f.name === candidateName);
+    if (!qf) continue;
+
+    let typeName = unwrapTypeName(qf.type) ?? deriveEntityTypeName(qf.name);
+    if (!typeName) continue;
+
+    const typeInfo = await postGraphQL<{
+      __type?: { name?: string; fields?: Array<{ name: string; type: TypeRef }> };
     }>(
       url,
-      `query SchemaTypes { __schema { types { name } } }`,
-      {},
-    ).catch(() => ({ __schema: null }));
-    const available = (typesData.__schema?.types ?? [])
-      .filter((t) => !t.name.startsWith("__"))
-      .map((t) => t.name)
-      .slice(0, 30)
-      .join(", ");
+      `
+        query EventType($name: String!) {
+          __type(name: $name) {
+            name
+            fields {
+              name
+              type { kind name ofType { kind name ofType { kind name } } }
+            }
+          }
+        }
+      `,
+      { name: typeName },
+    );
+
+    let resolved = typeInfo.__type;
+    if (!resolved) {
+      const alts = [
+        typeName.charAt(0).toLowerCase() + typeName.slice(1),
+        qf.name.charAt(0).toUpperCase() + qf.name.slice(1),
+      ].filter((n) => n && n !== typeName);
+      for (const alt of alts) {
+        const altInfo = await postGraphQL<{
+          __type?: { name?: string; fields?: Array<{ name: string; type: TypeRef }> };
+        }>(
+          url,
+          `
+            query EventType($name: String!) {
+              __type(name: $name) {
+                name
+                fields {
+                  name
+                  type { kind name ofType { kind name ofType { kind name } } }
+                }
+              }
+            }
+          `,
+          { name: alt },
+        );
+        if (altInfo.__type?.fields?.length) {
+          resolved = altInfo.__type;
+          typeName = altInfo.__type.name ?? alt;
+          break;
+        }
+      }
+    }
+
+    if (!resolved?.fields?.length) {
+      errors.push(`type "${typeName}" not in schema`);
+      continue;
+    }
+
+    const ef = resolved.fields ?? [];
+    const tsF = pickField(ef, ["timestamp", "blockTimestamp", "block_timestamp"]);
+    const blockF = pickField(ef, ["blockNumber", "block_number"]);
+    const orderBy = tsF ?? blockF;
+
+    if (!orderBy) {
+      errors.push(
+        `tipo "${typeName}" sem timestamp/blockNumber. Campos: ${ef.map((f) => f.name).slice(0, 12).join(", ")}`,
+      );
+      continue;
+    }
+
+    queryField = qf;
+    eventTypeName = typeName;
+    resolvedType = resolved;
+    eventFields = ef;
+    break;
+  }
+
+  if (!queryField || !resolvedType) {
+    const available = fields.map((f) => f.name).slice(0, 25).join(", ");
+    const errDetail =
+      errors.length > 0
+        ? ` Tentativas: ${errors.join("; ")}.`
+        : "";
     throw new Error(
-      `Compound subgraph: event type not found. Tried: ${triedNames.join(", ")}. Query field: "${queryField.name}". Available types (ex.): ${available || "—"}`,
+      `Compound subgraph: nenhum campo de eventos com timestamp/blockNumber. Campos disponíveis (ex.): ${available}.${errDetail}`,
     );
   }
 
-  const eventFields = resolvedType.fields ?? [];
   const timestampField = pickField(eventFields, [
     "timestamp",
     "blockTimestamp",
@@ -1453,11 +1462,6 @@ async function resolveCompoundSchemaConfig(
   const assetField = pickField(eventFields, ["asset", "token", "market"]);
 
   const orderByField = timestampField ?? blockNumberField;
-  if (!orderByField) {
-    throw new Error(
-      `Compound subgraph: tipo "${eventTypeName}" sem campo timestamp nem blockNumber. Campos: ${eventFields.map((f) => f.name).slice(0, 15).join(", ")}`,
-    );
-  }
 
   let assetFields: CompoundSchemaConfig["assetFields"];
   if (assetField) {
