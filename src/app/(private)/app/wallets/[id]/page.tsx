@@ -173,7 +173,7 @@ function PnlCard({
               <p className="text-xs text-muted-foreground">
                 {error
                   ? "Erro ao carregar dados históricos. Sincroniza os eventos para ver o P&L."
-                  : "Sincroniza os eventos históricos para ver quanto emprestaste e calcular o P&L."}
+                  : "Sincroniza os eventos históricos para ver o valor do empréstimo e calcular o P&L."}
               </p>
             </div>
           </CardContent>
@@ -239,7 +239,7 @@ function PnlCard({
       <CardContent className="space-y-4">
         <div className="space-y-3">
           <div className="flex items-center justify-between">
-            <p className="text-sm text-muted-foreground">Quanto emprestaste (USD)</p>
+            <p className="text-sm text-muted-foreground">Valor do empréstimo (USD)</p>
             <p className="text-lg font-semibold">
               {formatUsd(finalDebtPnl.borrowedUsd)}
             </p>

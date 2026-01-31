@@ -459,7 +459,7 @@ export async function GET(request: Request) {
   }
 
   // Calculate debt P&L: quanto emprestaste vs quanto vale agora
-  // "Quanto emprestaste" = Total líquido emprestado (borrows - repays) em USD histórico
+  // Valor do empréstimo = Total líquido emprestado (borrows - repays) em USD histórico
   // Este valor não muda - é a soma histórica dos borrows menos os repays
   const totalBorrowedUsd = totals.borrowUsd - totals.repayUsd;
   
