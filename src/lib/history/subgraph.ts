@@ -120,13 +120,39 @@ const PAGE_SIZE = 1000;
 const compoundSchemaCache = new Map<string, Promise<CompoundSchemaConfig>>();
 const aaveSchemaCache = new Map<string, Promise<AaveSchemaConfig[]>>();
 
+function normalizeChain(chain: string) {
+  return (chain ?? "").toLowerCase().replace(/^arbitrum-one$/i, "arbitrum");
+}
+
 function getSubgraphUrl(protocol: Protocol, chain: string) {
-  if (protocol === "compound") {
-    const parsed = parseCompoundChain(chain);
-    return parsed ? COMPOUND_SUBGRAPHS[parsed] ?? null : null;
-  }
-  const parsed = parseAaveChain(chain);
-  return parsed ? AAVE_SUBGRAPHS[parsed] ?? null : null;
+  const chainNorm = normalizeChain(chain);
+  const parsed =
+    protocol === "compound"
+      ? parseCompoundChain(chainNorm)
+      : parseAaveChain(chainNorm);
+  const url =
+    protocol === "compound"
+      ? parsed
+        ? COMPOUND_SUBGRAPHS[parsed as keyof typeof COMPOUND_SUBGRAPHS] ?? null
+        : null
+      : parsed
+        ? AAVE_SUBGRAPHS[parsed as keyof typeof AAVE_SUBGRAPHS] ?? null
+        : null;
+  // #region agent log
+  fetch("http://127.0.0.1:7242/ingest/f851284a-e320-4111-a6b3-990427dc7984", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      location: "subgraph.ts:getSubgraphUrl",
+      message: "Subgraph URL",
+      data: { protocol, chain: chainNorm, parsed, hasUrl: !!url },
+      timestamp: Date.now(),
+      sessionId: "debug-session",
+      hypothesisId: "D",
+    }),
+  }).catch(() => {});
+  // #endregion
+  return url;
 }
 
 async function postGraphQL<T>(

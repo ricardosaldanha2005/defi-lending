@@ -111,6 +111,9 @@ export async function POST(request: Request) {
   }
 
   const protocol = (wallet.protocol ?? "aave") as Protocol;
+  const chainNorm = (wallet.chain ?? "")
+    .toLowerCase()
+    .replace(/^arbitrum-one$/i, "arbitrum");
 
   if (reset) {
     const { error: deleteEventsError } = await supabase
@@ -151,7 +154,7 @@ export async function POST(request: Request) {
   try {
     const events = await fetchSubgraphEvents({
       protocol,
-      chain: wallet.chain,
+      chain: chainNorm,
       address: wallet.address,
       fromTimestamp,
       maxEvents,

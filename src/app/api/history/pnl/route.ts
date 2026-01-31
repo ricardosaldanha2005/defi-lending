@@ -205,6 +205,25 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Wallet not found" }, { status: 404 });
   }
 
+  const chainNorm = (wallet.chain ?? "")
+    .toLowerCase()
+    .replace(/^arbitrum-one$/i, "arbitrum");
+
+  // #region agent log
+  fetch("http://127.0.0.1:7242/ingest/f851284a-e320-4111-a6b3-990427dc7984", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      location: "api/history/pnl/route.ts:GET",
+      message: "P&L request",
+      data: { walletId, chain: wallet.chain, chainNorm, protocol: wallet.protocol },
+      timestamp: Date.now(),
+      sessionId: "debug-session",
+      hypothesisId: "A",
+    }),
+  }).catch(() => {});
+  // #endregion
+
   const from = searchParams.get("from");
   const to = searchParams.get("to");
 
@@ -340,18 +359,59 @@ export async function GET(request: Request) {
   const netCollateralFlow = totals.withdrawUsd - totals.supplyUsd;
   const netDebtFlow = totals.borrowUsd - totals.repayUsd;
 
+  // #region agent log
+  fetch("http://127.0.0.1:7242/ingest/f851284a-e320-4111-a6b3-990427dc7984", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      location: "api/history/pnl/route.ts:events",
+      message: "Events loaded",
+      data: {
+        chain: wallet.chain,
+        eventsCount: (data as unknown[] | null)?.length ?? 0,
+        borrowUsd: totals.borrowUsd,
+        repayUsd: totals.repayUsd,
+      },
+      timestamp: Date.now(),
+      sessionId: "debug-session",
+      hypothesisId: "B",
+    }),
+  }).catch(() => {});
+  // #endregion
+
   // Fetch current position for mark-to-market
   let currentPositions: AssetPosition[] = [];
   try {
     currentPositions = await fetchCurrentPosition(
       wallet.address,
-      wallet.chain,
+      chainNorm,
       wallet.protocol as Protocol,
     );
   } catch (error) {
     console.error("Failed to fetch current position:", error);
     // Continue with empty positions - P&L will be calculated from historical data only
   }
+
+  // #region agent log
+  const currentDebtSum = currentPositions.reduce((s, p) => s + p.debtUsd, 0);
+  fetch("http://127.0.0.1:7242/ingest/f851284a-e320-4111-a6b3-990427dc7984", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      location: "api/history/pnl/route.ts:positions",
+      message: "Current position",
+      data: {
+        chain: wallet.chain,
+        protocol: wallet.protocol,
+        positionsCount: currentPositions.length,
+        currentDebtSum,
+      },
+      timestamp: Date.now(),
+      sessionId: "debug-session",
+      hypothesisId: "C",
+    }),
+  }).catch(() => {});
+  // #endregion
 
   // Calculate mark-to-market P&L
   let markToMarketPnl = 0;
