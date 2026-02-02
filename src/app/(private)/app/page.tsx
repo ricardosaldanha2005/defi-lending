@@ -67,6 +67,17 @@ export default function DashboardPage() {
   const [webhookError, setWebhookError] = useState<string | null>(null);
   const aboveMaxNotifyPct = 0.1;
 
+  type BorrowRepayEvent = {
+    event_type: string;
+    asset_symbol: string | null;
+    amount: number | null;
+    amount_usd: number | null;
+  };
+  const [borrowRepayEvents, setBorrowRepayEvents] = useState<
+    BorrowRepayEvent[]
+  >([]);
+  const [borrowRepayLoading, setBorrowRepayLoading] = useState(false);
+
   const onProtocolChange = (value: string) => {
     const nextProtocol = value as Protocol;
     setProtocol(nextProtocol);
@@ -166,6 +177,74 @@ export default function DashboardPage() {
   }, [historyDays, historyFilter]);
 
   useEffect(() => {
+    const aaveWallets = wallets.filter((w) => w.protocol === "aave");
+    if (!aaveWallets.length) {
+      setBorrowRepayEvents([]);
+      return;
+    }
+    let active = true;
+    setBorrowRepayLoading(true);
+    Promise.all(
+      aaveWallets.map((w) =>
+        fetch(`/api/history/events?walletId=${w.id}&limit=1000`).then((r) =>
+          r.json(),
+        ),
+      ),
+    )
+      .then((results) => {
+        if (!active) return;
+        const merged = (results as { events?: BorrowRepayEvent[] }[]).flatMap(
+          (r) => r.events ?? [],
+        );
+        const borrowRepay = merged.filter((e) => {
+          const t = (e.event_type ?? "").toLowerCase();
+          return t.includes("borrow") || t.includes("repay");
+        });
+        setBorrowRepayEvents(borrowRepay);
+      })
+      .catch(() => {
+        if (active) setBorrowRepayEvents([]);
+      })
+      .finally(() => {
+        if (active) setBorrowRepayLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [wallets]);
+
+  const averageCostByToken = useMemo(() => {
+    const bySymbol = new Map<
+      string,
+      { netAmount: number; netUsd: number }
+    >();
+    for (const e of borrowRepayEvents) {
+      const symbol = (e.asset_symbol ?? "").trim() || "—";
+      const amount = Number(e.amount ?? 0);
+      const usd = Number(e.amount_usd ?? 0);
+      const isBorrow = (e.event_type ?? "").toLowerCase().includes("borrow");
+      const sign = isBorrow ? 1 : -1;
+      const cur = bySymbol.get(symbol) ?? { netAmount: 0, netUsd: 0 };
+      bySymbol.set(symbol, {
+        netAmount: cur.netAmount + sign * amount,
+        netUsd: cur.netUsd + sign * usd,
+      });
+    }
+    return Array.from(bySymbol.entries())
+      .map(([symbol, { netAmount, netUsd }]) => ({
+        symbol,
+        netAmount,
+        netUsd,
+        avgCostUsd:
+          netAmount > 0 && Number.isFinite(netUsd)
+            ? netUsd / netAmount
+            : NaN,
+      }))
+      .filter((row) => row.symbol !== "—" && row.netAmount > 0)
+      .sort((a, b) => b.netUsd - a.netUsd);
+  }, [borrowRepayEvents]);
+
+  useEffect(() => {
     const entries = Object.entries(summary);
     if (!entries.length) return;
 
@@ -228,23 +307,6 @@ export default function DashboardPage() {
     });
   }, [summary]);
 
-
-  const walletAverageBorrowUsd = useMemo(() => {
-    const byWallet = new Map<string, { sum: number; count: number }>();
-    for (const s of history) {
-      const debt = Number(s.total_debt_usd ?? 0);
-      const cur = byWallet.get(s.wallet_id) ?? { sum: 0, count: 0 };
-      byWallet.set(s.wallet_id, {
-        sum: cur.sum + debt,
-        count: cur.count + 1,
-      });
-    }
-    const out = new Map<string, number>();
-    byWallet.forEach((v, walletId) => {
-      out.set(walletId, v.count > 0 ? v.sum / v.count : NaN);
-    });
-    return out;
-  }, [history]);
 
   const historySeries = useMemo(() => {
     if (!history.length) return [];
@@ -388,11 +450,10 @@ export default function DashboardPage() {
           </div>
         </CardHeader>
         <CardContent className="space-y-3">
-          <div className="grid grid-cols-8 rounded-lg bg-muted/40 px-3 py-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+          <div className="grid grid-cols-7 rounded-lg bg-muted/40 px-3 py-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
             <span>Estratégia</span>
             <span>Colateral</span>
             <span>Dívida</span>
-            <span>Borrow médio</span>
             <span>HF</span>
             <span>Protocolo</span>
             <span>Chain</span>
@@ -412,7 +473,6 @@ export default function DashboardPage() {
                 name={wallet.label ?? "Sem nome"}
                 chain={wallet.chain}
                 protocol={wallet.protocol}
-                averageBorrowUsd={walletAverageBorrowUsd.get(wallet.id)}
                 onData={(data) =>
                   setSummary((prev) => {
                     const current = prev[wallet.id];
@@ -440,11 +500,10 @@ export default function DashboardPage() {
             ))}
           </div>
           <div className="rounded-lg border bg-muted/20 px-3 py-2">
-            <div className="grid grid-cols-8 text-sm font-semibold">
+            <div className="grid grid-cols-7 text-sm font-semibold">
               <span>Total</span>
               <span>{formatUsd(totals.collateralUsd)}</span>
               <span>{formatUsd(totals.debtUsd)}</span>
-              <span>—</span>
               <span>
                 {Number.isFinite(totals.hf) ? formatNumber(totals.hf, 2) : "-"}
               </span>
@@ -453,6 +512,51 @@ export default function DashboardPage() {
               <span>—</span>
             </div>
           </div>
+        </CardContent>
+      </Card>
+
+      <Card className="border bg-card/80 shadow-sm">
+        <CardHeader>
+          <CardTitle>Custo médio por token emprestado</CardTitle>
+          <p className="text-sm text-muted-foreground">
+            Preço médio ponderado (borrows − repays) por ativo em dívida.
+          </p>
+        </CardHeader>
+        <CardContent>
+          {borrowRepayLoading ? (
+            <p className="text-sm text-muted-foreground">
+              A carregar eventos borrow/repay...
+            </p>
+          ) : !averageCostByToken.length ? (
+            <p className="text-sm text-muted-foreground">
+              Sem eventos borrow/repay ou sem dívida por ativo. Sincroniza o
+              histórico nas estratégias Aave.
+            </p>
+          ) : (
+            <div className="rounded-lg border">
+              <div className="grid grid-cols-3 gap-3 border-b bg-muted/40 px-3 py-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                <span>Token</span>
+                <span className="text-right">Dívida (USD)</span>
+                <span className="text-right">Custo médio (USD)</span>
+              </div>
+              {averageCostByToken.map((row) => (
+                <div
+                  key={row.symbol}
+                  className="grid grid-cols-3 gap-3 border-b border-border/50 px-3 py-2 text-sm last:border-b-0"
+                >
+                  <span className="font-medium">{row.symbol}</span>
+                  <span className="text-right">
+                    {formatUsd(row.netUsd)}
+                  </span>
+                  <span className="text-right">
+                    {Number.isFinite(row.avgCostUsd)
+                      ? formatNumber(row.avgCostUsd, 4)
+                      : "—"}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -733,7 +837,6 @@ function StrategySummaryRow({
   name,
   chain,
   protocol,
-  averageBorrowUsd,
   onData,
   hfMin,
   hfMax,
@@ -743,7 +846,6 @@ function StrategySummaryRow({
   name: string;
   chain: string;
   protocol: Protocol;
-  averageBorrowUsd?: number;
   onData: (data: {
     collateralUsd: number;
     debtUsd: number;
@@ -875,15 +977,10 @@ function StrategySummaryRow({
   }, [data, chain, walletId]);
 
   return (
-    <div className="grid grid-cols-8 items-center rounded-lg border border-transparent px-3 py-2 text-sm transition-colors hover:border-border hover:bg-muted/30">
+    <div className="grid grid-cols-7 items-center rounded-lg border border-transparent px-3 py-2 text-sm transition-colors hover:border-border hover:bg-muted/30">
       <span className="truncate font-medium">{name}</span>
       <span>{formatUsd(collateralUsd)}</span>
       <span>{formatUsd(debtUsd)}</span>
-      <span>
-        {averageBorrowUsd != null && Number.isFinite(averageBorrowUsd)
-          ? formatUsd(averageBorrowUsd)
-          : "-"}
-      </span>
       <span>{Number.isFinite(hf) ? formatNumber(hf, 2) : "-"}</span>
       <span>{PROTOCOL_LABELS[protocol]}</span>
       <span className="uppercase text-muted-foreground">{chain}</span>
