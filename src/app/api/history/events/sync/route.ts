@@ -294,10 +294,30 @@ export async function POST(request: Request) {
     });
   } catch (error) {
     console.error("history.events.fetch", error);
+    const detail = error instanceof Error ? error.message : String(error);
+    const hint =
+      protocol === "compound"
+        ? " Para Compound: verifica COMPOUND_SUBGRAPH_BASE_EVENTS (ou ARBITRUM_EVENTS) em .env.local, que a URL do The Graph inclui a API key (ex.: .../api/<API_KEY>/subgraphs/id/... ou define GRAPH_API_KEY), e reinicia o servidor (npm run dev)."
+        : "";
+    const debug =
+      protocol === "compound"
+        ? {
+            GRAPH_API_KEY: process.env.GRAPH_API_KEY ? "set" : "not set",
+            COMPOUND_SUBGRAPH_BASE_EVENTS: process.env
+              .COMPOUND_SUBGRAPH_BASE_EVENTS
+              ? "set"
+              : "not set",
+            COMPOUND_SUBGRAPH_ARBITRUM_EVENTS: process.env
+              .COMPOUND_SUBGRAPH_ARBITRUM_EVENTS
+              ? "set"
+              : "not set",
+          }
+        : undefined;
     return NextResponse.json(
       {
         error: "Failed to fetch subgraph events",
-        detail: error instanceof Error ? error.message : String(error),
+        detail: detail + hint,
+        ...(debug && { debug }),
       },
       { status: 500 },
     );

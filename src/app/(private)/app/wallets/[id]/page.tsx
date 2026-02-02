@@ -367,7 +367,11 @@ function HistoryEventsTab({
       if (!r.ok) {
         const detail = (j as { detail?: string }).detail;
         const err = (j as { error?: string }).error;
-        throw new Error(detail || err || "Sincronização falhou");
+        const debug = (j as { debug?: Record<string, string> }).debug;
+        const msg = detail || err || "Sincronização falhou";
+        throw new Error(
+          debug ? `${msg} [${JSON.stringify(debug)}]` : msg,
+        );
       }
       await mutate();
     } catch (e) {

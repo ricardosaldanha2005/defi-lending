@@ -156,10 +156,29 @@ AAVE_SUBGRAPH_POLYGON=https://gateway.thegraph.com/api/<API_KEY>/subgraphs/id/6y
 AAVE_SUBGRAPH_ARBITRUM=https://gateway.thegraph.com/api/<API_KEY>/subgraphs/id/4xyasjQeREe7PxnF6wVdobZvCw5mhoHZq3T7guRpuNPf
 COMPOUND_SUBGRAPH_ARBITRUM=https://gateway.thegraph.com/api/<API_KEY>/subgraphs/id/5MjRndNWGhqvNX7chUYLQDnvEgc8DaH8eisEkcJt71SR
 COMPOUND_SUBGRAPH_BASE=https://gateway.thegraph.com/api/<API_KEY>/subgraphs/id/2hcXhs36pTBDVUmk5K2Zkr6N4UYGwaHuco2a6jyTsijo
+# Opcional: subgraph que indexa eventos Borrow/Repay (quando e quanto). Se definido, é usado para o histórico em vez do subgraph principal (PositionAccounting).
+# COMPOUND_SUBGRAPH_ARBITRUM_EVENTS=
+# COMPOUND_SUBGRAPH_BASE_EVENTS=
+# The Graph: se a URL for gateway.thegraph.com/api/subgraphs/id/... sem API key, define GRAPH_API_KEY (obtém em thegraph.com/studio) e a app injeta-a na URL.
+# GRAPH_API_KEY=
 COINGECKO_API_KEY=
 ```
 
 ## Histórico e P&L (eventos on-chain)
+
+### Histórico Borrow/Repay no Compound
+
+O subgraph principal do Compound (`COMPOUND_SUBGRAPH_BASE` / `COMPOUND_SUBGRAPH_ARBITRUM`) expõe **PositionAccounting** (estado da posição), não eventos Borrow/Repay com data e valor. Para ver **quando e quanto** fizeste borrows e repays:
+
+1. Usa um subgraph que indexe eventos Borrow/Repay (ex.: Goldsky, The Graph com schema de eventos, ou outro deployment).
+2. Define as variáveis opcionais no `.env` ou `.env.local`:
+   - `COMPOUND_SUBGRAPH_BASE_EVENTS=<URL do subgraph de eventos Base>`
+   - `COMPOUND_SUBGRAPH_ARBITRUM_EVENTS=<URL do subgraph de eventos Arbitrum>`
+   - Se usares The Graph e a URL for `.../api/subgraphs/id/...` (sem API key no path), define também `GRAPH_API_KEY=<tua API key>` (cria em [thegraph.com/studio](https://thegraph.com/studio)); a app injeta-a na URL.
+3. Reinicia o servidor (`npm run dev`) após alterar `.env.local`.
+4. Sincroniza de novo (botão "Sincronizar eventos" na aba Histórico).
+
+Se estas variáveis não estiverem definidas, o histórico Compound usa o subgraph principal e mostra registos de posição (datas aproximadas, tipo UNKNOWN).
 
 ### Sync de eventos
 

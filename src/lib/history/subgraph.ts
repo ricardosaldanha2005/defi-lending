@@ -118,6 +118,12 @@ const COMPOUND_SUBGRAPHS: Record<string, string | undefined> = {
   base: process.env.COMPOUND_SUBGRAPH_BASE,
 };
 
+/** Opcional: subgraph que indexa eventos Borrow/Repay (quando e quanto). Se definido, é usado para sync em vez do subgraph principal (PositionAccounting). */
+const COMPOUND_SUBGRAPHS_EVENTS: Record<string, string | undefined> = {
+  arbitrum: process.env.COMPOUND_SUBGRAPH_ARBITRUM_EVENTS,
+  base: process.env.COMPOUND_SUBGRAPH_BASE_EVENTS,
+};
+
 const PAGE_SIZE = 1000;
 const MAX_COMPOUND_PAGES = 25; // evita loop infinito se subgraph devolver sempre páginas cheias sem filtro por conta
 const compoundSchemaCache = new Map<string, Promise<CompoundSchemaConfig>>();
@@ -158,20 +164,42 @@ function timestampToApproxBlockNumber(
   return Math.floor((timestamp - cfg.genesis) / cfg.blockTime);
 }
 
-function getSubgraphUrl(protocol: Protocol, chain: string) {
+/** Injeta GRAPH_API_KEY na URL do The Graph se a URL tiver /api/subgraphs/ (sem key). */
+function injectGraphApiKey(url: string | null): string | null {
+  if (!url || !url.includes("gateway.thegraph.com")) return url;
+  const apiKey = process.env.GRAPH_API_KEY ?? process.env.THE_GRAPH_API_KEY;
+  if (!apiKey) return url;
+  if (/\/api\/[^/]+\/subgraphs\//.test(url)) return url;
+  return url.replace("/api/subgraphs/", `/api/${apiKey}/subgraphs/`);
+}
+
+function getSubgraphUrl(
+  protocol: Protocol,
+  chain: string,
+  preferEventsSubgraph = false,
+) {
   const chainNorm = normalizeChain(chain);
   const parsed =
     protocol === "compound"
       ? parseCompoundChain(chainNorm)
       : parseAaveChain(chainNorm);
-  const url =
-    protocol === "compound"
-      ? parsed
-        ? COMPOUND_SUBGRAPHS[parsed as keyof typeof COMPOUND_SUBGRAPHS] ?? null
-        : null
-      : parsed
-        ? AAVE_SUBGRAPHS[parsed as keyof typeof AAVE_SUBGRAPHS] ?? null
-        : null;
+  let url: string | null = null;
+  if (protocol === "compound" && parsed) {
+    const key = parsed as keyof typeof COMPOUND_SUBGRAPHS;
+    if (preferEventsSubgraph) {
+      const eventsUrl =
+        process.env[
+          key === "base"
+            ? "COMPOUND_SUBGRAPH_BASE_EVENTS"
+            : "COMPOUND_SUBGRAPH_ARBITRUM_EVENTS"
+        ];
+      if (eventsUrl) url = eventsUrl;
+    }
+    if (!url) url = COMPOUND_SUBGRAPHS[key] ?? null;
+  } else if (parsed) {
+    url = AAVE_SUBGRAPHS[parsed as keyof typeof AAVE_SUBGRAPHS] ?? null;
+  }
+  url = injectGraphApiKey(url);
   // #region agent log
   fetch("http://127.0.0.1:7242/ingest/f851284a-e320-4111-a6b3-990427dc7984", {
     method: "POST",
@@ -323,7 +351,7 @@ export async function fetchSubgraphEvents({
   fromTimestamp,
   maxEvents,
 }: FetchParams): Promise<NormalizedEvent[]> {
-  const url = getSubgraphUrl(protocol, chain);
+  const url = getSubgraphUrl(protocol, chain, true);
   if (!url) {
     const envVar =
       protocol === "compound"
@@ -1391,6 +1419,10 @@ async function resolveCompoundSchemaConfig(
 
   const fields = data.__schema?.queryType?.fields ?? [];
   const candidateNames = [
+    "borrows",
+    "repays",
+    "borrowEvents",
+    "repayEvents",
     "accountEvents",
     "events",
     "accountEvent",
