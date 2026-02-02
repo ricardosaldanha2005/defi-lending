@@ -24,14 +24,27 @@ export async function GET(request: Request) {
   if (isAddress(walletIdParam)) {
     const { data: wallet } = await supabase
       .from("user_wallets")
-      .select("id")
+      .select("id,protocol")
       .eq("address", walletIdParam.toLowerCase())
       .eq("user_id", user.id)
       .maybeSingle();
     if (!wallet?.id) {
       return NextResponse.json({ events: [] });
     }
+    if (wallet.protocol === "compound") {
+      return NextResponse.json({ events: [] });
+    }
     walletId = wallet.id;
+  } else {
+    const { data: wallet } = await supabase
+      .from("user_wallets")
+      .select("protocol")
+      .eq("id", walletId)
+      .eq("user_id", user.id)
+      .maybeSingle();
+    if (wallet?.protocol === "compound") {
+      return NextResponse.json({ events: [] });
+    }
   }
 
   const limitRaw = Number(searchParams.get("limit") ?? 200);

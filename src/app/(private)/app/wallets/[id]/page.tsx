@@ -328,9 +328,11 @@ function PnlCard({
 function HistoryEventsTab({
   walletId,
   chain,
+  protocol,
 }: {
   walletId: string;
   chain?: string;
+  protocol?: Protocol | null;
 }) {
   const [eventTypeFilter, setEventTypeFilter] = useState<string>("borrow_only");
   const [assetFilter, setAssetFilter] = useState<string>("all");
@@ -467,6 +469,19 @@ function HistoryEventsTab({
     if (key.includes("liquidat")) return "destructive";
     return "outline";
   };
+
+  if (protocol === "compound") {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Movimentos</CardTitle>
+        </CardHeader>
+        <CardContent className="py-8 text-center text-sm text-muted-foreground">
+          Histórico indisponível para Compound. Apenas histórico Aave está ativo.
+        </CardContent>
+      </Card>
+    );
+  }
 
   if (isLoading) {
     return (
@@ -1325,7 +1340,11 @@ export default function WalletDetailPage() {
         </TabsContent>
 
         <TabsContent value="historico" className="space-y-4">
-          <HistoryEventsTab walletId={walletId} chain={wallet?.chain} />
+          <HistoryEventsTab
+            walletId={walletId}
+            chain={wallet?.chain}
+            protocol={wallet?.protocol}
+          />
         </TabsContent>
       </Tabs>
 

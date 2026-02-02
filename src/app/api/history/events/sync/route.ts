@@ -111,6 +111,16 @@ export async function POST(request: Request) {
   }
 
   const protocol = (wallet.protocol ?? "aave") as Protocol;
+  if (protocol === "compound") {
+    return NextResponse.json(
+      {
+        error: "Compound history disabled",
+        detail:
+          "Histórico Compound está desativado. Apenas histórico Aave está ativo.",
+      },
+      { status: 400 },
+    );
+  }
   const chainNorm = (wallet.chain ?? "")
     .toLowerCase()
     .replace(/^arbitrum-one$/i, "arbitrum");
