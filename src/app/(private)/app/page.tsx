@@ -70,6 +70,8 @@ export default function DashboardPage() {
   type BorrowRepayEvent = {
     event_type: string;
     asset_symbol: string | null;
+    asset_address: string | null;
+    chain: string | null;
     amount: number | null;
     amount_usd: number | null;
   };
@@ -77,6 +79,10 @@ export default function DashboardPage() {
     BorrowRepayEvent[]
   >([]);
   const [borrowRepayLoading, setBorrowRepayLoading] = useState(false);
+  const [currentPricesBySymbol, setCurrentPricesBySymbol] = useState<
+    Record<string, number>
+  >({});
+  const [currentPricesLoading, setCurrentPricesLoading] = useState(false);
 
   const onProtocolChange = (value: string) => {
     const nextProtocol = value as Protocol;
@@ -216,7 +222,7 @@ export default function DashboardPage() {
   const averageCostByToken = useMemo(() => {
     const bySymbol = new Map<
       string,
-      { netAmount: number; netUsd: number }
+      { netAmount: number; netUsd: number; chain: string; assetAddress: string }
     >();
     for (const e of borrowRepayEvents) {
       const symbol = (e.asset_symbol ?? "").trim() || "—";
@@ -224,17 +230,32 @@ export default function DashboardPage() {
       const usd = Number(e.amount_usd ?? 0);
       const isBorrow = (e.event_type ?? "").toLowerCase().includes("borrow");
       const sign = isBorrow ? 1 : -1;
-      const cur = bySymbol.get(symbol) ?? { netAmount: 0, netUsd: 0 };
-      bySymbol.set(symbol, {
-        netAmount: cur.netAmount + sign * amount,
-        netUsd: cur.netUsd + sign * usd,
-      });
+      const cur = bySymbol.get(symbol);
+      const chain = (e.chain ?? "").trim() || "";
+      const assetAddress = (e.asset_address ?? "").trim().toLowerCase() || "";
+      if (!cur) {
+        bySymbol.set(symbol, {
+          netAmount: sign * amount,
+          netUsd: sign * usd,
+          chain,
+          assetAddress,
+        });
+      } else {
+        bySymbol.set(symbol, {
+          netAmount: cur.netAmount + sign * amount,
+          netUsd: cur.netUsd + sign * usd,
+          chain: cur.chain,
+          assetAddress: cur.assetAddress,
+        });
+      }
     }
     return Array.from(bySymbol.entries())
-      .map(([symbol, { netAmount, netUsd }]) => ({
+      .map(([symbol, { netAmount, netUsd, chain, assetAddress }]) => ({
         symbol,
         netAmount,
         netUsd,
+        chain,
+        assetAddress,
         avgCostUsd:
           netAmount > 0 && Number.isFinite(netUsd)
             ? netUsd / netAmount
@@ -243,6 +264,49 @@ export default function DashboardPage() {
       .filter((row) => row.symbol !== "—" && row.netAmount > 0)
       .sort((a, b) => b.netUsd - a.netUsd);
   }, [borrowRepayEvents]);
+
+  useEffect(() => {
+    const rows = averageCostByToken.filter(
+      (r) => r.chain && r.assetAddress,
+    );
+    if (!rows.length) {
+      setCurrentPricesBySymbol({});
+      return;
+    }
+    let active = true;
+    setCurrentPricesLoading(true);
+    const items = rows.map((r) => ({
+      chain: r.chain,
+      tokenAddress: r.assetAddress,
+    }));
+    fetch("/api/history/prices/current", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ items }),
+    })
+      .then((res) => res.json())
+      .then((data: { prices?: (number | null)[] }) => {
+        if (!active) return;
+        const prices = data.prices ?? [];
+        const bySymbol: Record<string, number> = {};
+        rows.forEach((row, i) => {
+          const p = prices[i];
+          if (Number.isFinite(p)) {
+            bySymbol[row.symbol] = p as number;
+          }
+        });
+        setCurrentPricesBySymbol(bySymbol);
+      })
+      .catch(() => {
+        if (active) setCurrentPricesBySymbol({});
+      })
+      .finally(() => {
+        if (active) setCurrentPricesLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [averageCostByToken]);
 
   useEffect(() => {
     const entries = Object.entries(summary);
@@ -534,15 +598,19 @@ export default function DashboardPage() {
             </p>
           ) : (
             <div className="rounded-lg border">
-              <div className="grid grid-cols-3 gap-3 border-b bg-muted/40 px-3 py-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              <div className="grid grid-cols-4 gap-3 border-b bg-muted/40 px-3 py-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
                 <span>Token</span>
                 <span className="text-right">Dívida (USD)</span>
                 <span className="text-right">Custo médio (USD)</span>
+                <span className="text-right">
+                  Valor atual (USD)
+                  {currentPricesLoading ? " …" : ""}
+                </span>
               </div>
               {averageCostByToken.map((row) => (
                 <div
                   key={row.symbol}
-                  className="grid grid-cols-3 gap-3 border-b border-border/50 px-3 py-2 text-sm last:border-b-0"
+                  className="grid grid-cols-4 gap-3 border-b border-border/50 px-3 py-2 text-sm last:border-b-0"
                 >
                   <span className="font-medium">{row.symbol}</span>
                   <span className="text-right">
@@ -552,6 +620,13 @@ export default function DashboardPage() {
                     {Number.isFinite(row.avgCostUsd)
                       ? formatNumber(row.avgCostUsd, 4)
                       : "—"}
+                  </span>
+                  <span className="text-right">
+                    {Number.isFinite(currentPricesBySymbol[row.symbol])
+                      ? formatNumber(currentPricesBySymbol[row.symbol], 4)
+                      : currentPricesLoading
+                        ? "…"
+                        : "—"}
                   </span>
                 </div>
               ))}
