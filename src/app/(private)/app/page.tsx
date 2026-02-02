@@ -229,6 +229,23 @@ export default function DashboardPage() {
   }, [summary]);
 
 
+  const walletAverageBorrowUsd = useMemo(() => {
+    const byWallet = new Map<string, { sum: number; count: number }>();
+    for (const s of history) {
+      const debt = Number(s.total_debt_usd ?? 0);
+      const cur = byWallet.get(s.wallet_id) ?? { sum: 0, count: 0 };
+      byWallet.set(s.wallet_id, {
+        sum: cur.sum + debt,
+        count: cur.count + 1,
+      });
+    }
+    const out = new Map<string, number>();
+    byWallet.forEach((v, walletId) => {
+      out.set(walletId, v.count > 0 ? v.sum / v.count : NaN);
+    });
+    return out;
+  }, [history]);
+
   const historySeries = useMemo(() => {
     if (!history.length) return [];
     const bucketMinutes = 15;
@@ -371,10 +388,11 @@ export default function DashboardPage() {
           </div>
         </CardHeader>
         <CardContent className="space-y-3">
-          <div className="grid grid-cols-7 rounded-lg bg-muted/40 px-3 py-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+          <div className="grid grid-cols-8 rounded-lg bg-muted/40 px-3 py-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
             <span>Estratégia</span>
             <span>Colateral</span>
             <span>Dívida</span>
+            <span>Borrow médio</span>
             <span>HF</span>
             <span>Protocolo</span>
             <span>Chain</span>
@@ -394,6 +412,7 @@ export default function DashboardPage() {
                 name={wallet.label ?? "Sem nome"}
                 chain={wallet.chain}
                 protocol={wallet.protocol}
+                averageBorrowUsd={walletAverageBorrowUsd.get(wallet.id)}
                 onData={(data) =>
                   setSummary((prev) => {
                     const current = prev[wallet.id];
@@ -421,10 +440,11 @@ export default function DashboardPage() {
             ))}
           </div>
           <div className="rounded-lg border bg-muted/20 px-3 py-2">
-            <div className="grid grid-cols-7 text-sm font-semibold">
+            <div className="grid grid-cols-8 text-sm font-semibold">
               <span>Total</span>
               <span>{formatUsd(totals.collateralUsd)}</span>
               <span>{formatUsd(totals.debtUsd)}</span>
+              <span>—</span>
               <span>
                 {Number.isFinite(totals.hf) ? formatNumber(totals.hf, 2) : "-"}
               </span>
@@ -713,6 +733,7 @@ function StrategySummaryRow({
   name,
   chain,
   protocol,
+  averageBorrowUsd,
   onData,
   hfMin,
   hfMax,
@@ -722,6 +743,7 @@ function StrategySummaryRow({
   name: string;
   chain: string;
   protocol: Protocol;
+  averageBorrowUsd?: number;
   onData: (data: {
     collateralUsd: number;
     debtUsd: number;
@@ -853,10 +875,15 @@ function StrategySummaryRow({
   }, [data, chain, walletId]);
 
   return (
-    <div className="grid grid-cols-7 items-center rounded-lg border border-transparent px-3 py-2 text-sm transition-colors hover:border-border hover:bg-muted/30">
+    <div className="grid grid-cols-8 items-center rounded-lg border border-transparent px-3 py-2 text-sm transition-colors hover:border-border hover:bg-muted/30">
       <span className="truncate font-medium">{name}</span>
       <span>{formatUsd(collateralUsd)}</span>
       <span>{formatUsd(debtUsd)}</span>
+      <span>
+        {averageBorrowUsd != null && Number.isFinite(averageBorrowUsd)
+          ? formatUsd(averageBorrowUsd)
+          : "-"}
+      </span>
       <span>{Number.isFinite(hf) ? formatNumber(hf, 2) : "-"}</span>
       <span>{PROTOCOL_LABELS[protocol]}</span>
       <span className="uppercase text-muted-foreground">{chain}</span>
